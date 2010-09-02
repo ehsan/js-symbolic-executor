@@ -16,10 +16,18 @@
 
 package symbolicexecutor;
 
-
 /**
- * One type of basic {@link SymbolicExpression}: a JavaScript value.
  * @author elnatan@google.com (Elnatan Reisner)
+ *
  */
-interface JsValue extends SymbolicExpression {
+public class PathCondition {
+  private final Pair<SymbolicExpression, SymbolicHeap>[] pathCondition;
+
+  public PathCondition(Pair<SymbolicExpression, SymbolicHeap>[] pathCondition) {
+    this.pathCondition = pathCondition;
+  }
+
+  public Pair<SymbolicExpression, SymbolicHeap>[] get() {
+    return pathCondition;
+  }
 }

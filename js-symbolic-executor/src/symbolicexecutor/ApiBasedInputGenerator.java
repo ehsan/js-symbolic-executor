@@ -57,7 +57,7 @@ public class ApiBasedInputGenerator implements NewInputGenerator {
       if (conditionNumber < oldInput.depthBeforeBranching) {
         cvc3Context.assume(constraint);
       } else {
-        Map<String, JsValue> model = cvc3Context.query(constraint);
+        Map<String, JsPrimitive> model = cvc3Context.query(constraint);
         if (model != null) {
           String[] inputArgs = new String[oldInput.numArgs()];
           for (int argIndex = 0; argIndex < oldInput.numArgs(); argIndex++) {

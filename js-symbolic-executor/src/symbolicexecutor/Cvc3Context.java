@@ -176,10 +176,10 @@ class Cvc3Context {
    * <em>must</em> be true) in the current context.
    *
    * @return null if the query is VALID; or, if the query is INVALID, a
-   *         Map<String, JsValue> from variables to values that makes the query
+   *         Map<String, JsPrimitive> from variables to values that makes the query
    *         false.
    */
-  public Map<String, JsValue> query(SymbolicExpression constraint) {
+  public Map<String, JsPrimitive> query(SymbolicExpression constraint) {
     context.push();
     QueryResult queryResult = context.query(toBoolean(constraint));
     if (queryResult == QueryResult.VALID) {
@@ -187,11 +187,11 @@ class Cvc3Context {
       return null;
     } else if (queryResult == QueryResult.INVALID) {
       HashMap<Expr, Expr> model = getConcreteModel();
-      HashMap<String, JsValue> myModel =
+      HashMap<String, JsPrimitive> myModel =
         Maps.newHashMapWithExpectedSize(numSymbols);
       for (int i = 0; i < numSymbols; ++i) {
         String varName = "sym" + i;
-        myModel.put(varName, exprToJsValue(lookupVar(varName), model));
+        myModel.put(varName, exprToJsPrimitive(lookupVar(varName), model));
       }
       context.pop();
       return myModel;
@@ -200,7 +200,7 @@ class Cvc3Context {
     throw new RuntimeException("CVC3 returned " + queryResult);
   }
 
-  /** Returns a map from Exprs to Exprs that falsify the current assumptions. */
+  /** Returns a map from Exprs to Exprs that falsifies the current assumptions. */
   @SuppressWarnings("unchecked")
   private HashMap<Expr, Expr> getConcreteModel() {
     return context.getConcreteModel();
@@ -254,13 +254,13 @@ class Cvc3Context {
   // pieces be refactored to avoid duplication?
 
   /**
-   * Converts a CVC3 expression into a JsValue.
+   * Converts a CVC3 expression into a JsPrimitive.
    *
    * @param variable the name of the CVC3 variable whose value we want
    * @param model the concrete model, which mapping variables to values
-   * @return the JsValue representing the variable's concrete value in the model
+   * @return the JsPrimitive representing the variable's concrete value in the model
    */
-  private JsValue exprToJsValue(Expr variable, Map<Expr, Expr> model) {
+  private JsPrimitive exprToJsPrimitive(Expr variable, Map<Expr, Expr> model) {
     Expr value = model.get(variable);
     if (value == null) {
       throw new RuntimeException("Variable maps to null: " + variable);

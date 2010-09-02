@@ -22,7 +22,7 @@ import cvc3.Expr;
  * @author elnatan@google.com (Elnatan Reisner)
  *
  */
-public class JsString implements JsValue {
+public class JsString implements JsPrimitive {
   /** The encapsulated string value */
   private final String string;
 

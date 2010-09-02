@@ -14,31 +14,16 @@
  * limitations under the License.
  */
 
-package symbolicexecutor;
-
-import cvc3.Expr;
-
-/**
- * @author elnatan@google.com (Elnatan Reisner)
- *
- */
-public class JsNull implements JsPrimitive {
-  /** Private constructor because this is a singleton class. */
-  private JsNull() {}
-
-  /** The only instance of this class. */
-  public static final JsNull INSTANCE = new JsNull();
-
-  /* (non-Javadoc)
-   * @see SymbolicExpression#toCvc3(Cvc3Context)
-   */
-  @Override
-  public Expr toCvc3(Cvc3Context context) {
-    return context.construct("js_null");
+var f = function(a, b) {
+  var o0, o1, x;
+  o0 = {};
+  o1 = o0;
+  x = 0;
+  if (o1.a === a) {
+    x += 1;
   }
-
-  @Override
-  public String toString() {
-    return "null";
+  if (o1.b === b) {
+    x += 2;
   }
+  return x;
 }
