@@ -1,0 +1,340 @@
+##################################################
+# Makefile.std
+# Aaron Stump, Spring 1998
+# Modified by Clark Barrett, Spring 2005
+##################################################
+
+##################################################
+#
+# This Makefile can be included by other Makefiles
+# to get certain rules defined.  This Makefile
+# assumes the following (items marked with 
+# '**' cannot be left undefined, but all others 
+# can be).  Note that you should define at most one
+# of LIBRARY or EXECUTABLE
+# 
+#   ** 	1. $(SRC) gives the names of all the
+#	   source (*.cpp) files for your target.
+#       2. $(OTHER_OBJ) gives the names of any
+#          object files that should be linked in
+#          with the executable or library but
+#          not themselves built.
+#	3. $(HEADERS) gives the names of all 
+#	   the header files for your target.
+#	4. $(EXECUTABLE) gives the name of the
+#	   executable you're trying to compile,
+#	   if you're trying to compile an
+#	   executable.
+#       5. $(LIBRARY) gives the name of the 
+#          library you're trying to compile,
+#          if you're trying to compile a library.
+#       6. if $(OPTIMIZED) is defined, an optimized
+#          target is built.  Otherwise, a debug
+#          target is built.
+#       7. The options listed below have defaults
+#          that you may want to override.
+##################################################
+#
+# To review:
+#
+# What rule should delete the dynamic cvc3 binary? clean or spotty
+# What rule should delete the dynamic libs? clean or spotty
+# What rule should delete the dynamic link libcvc3.dylib in libs? clean or spotty
+# What rule should delete logs? (regressions.log) clean or distclean
+# What rule should delete autoconf-generated files? distclean
+#   (config.log, config.status, configure, autom4ta.cache)
+# What rule should delete configure-generated files? distclean
+#   (those derived from *.in:
+#   ./bin/cvc2smt.in ./bin/libmerge.in ./bin/run_tests.in ./doc/Doxyfile.in
+#   ./doc/Makefile.in ./LICENSE.in ./Makefile.local.in)
+# test/Makefile's clean should delete test/obj/**/*.o, test/bin/**/test
+# testc/Makefile's clean ...
+# cleaning test1.cvc?
+# How about library version information?
+##################################################
+
+# Force shell to Bash so we can rely on some process management
+# tricks like ${PIPESTATUS[0]} and <( ... ) for process redirection
+SHELL = /bin/bash
+
+##################################################
+# Special versions of dir/notdir built-ins that 
+# can handle paths with spaces
+# Note that, unlike dir/notdir, these functions
+# take a *single* path and assume that any spaces
+# are part of the path (they need not be escaped).
+##################################################
+
+s? = $(subst $(empty) ,?,$(1))
+?s = $(subst ?, ,$(1))
+notdirx = $(call ?s,$(notdir $(call s?,$(1))))
+dirx = $(call ?s,$(dir $(call s?,$(1))))
+
+##################################################
+# Compute flags and platform based on options
+##################################################
+
+#Default platform is generic
+ifndef PLATFORM
+  PLATFORM := generic
+endif
+
+ifeq ($(SMTCOMP),1)
+  LOCAL_CXXFLAGS = -O9 -funroll-all-loops -fexpensive-optimizations
+  DEBUG_PLATFORM =-smtcomp
+else
+ifeq ($(OPTGDB),1)
+  LOCAL_CXXFLAGS = -g
+  DEBUG_PLATFORM = -optgdb
+else
+ifeq ($(OPTDEBUG),1)
+  LOCAL_CXXFLAGS = -O2 -D_CVC3_DEBUG_MODE
+  DEBUG_PLATFORM = -optdbg
+else
+ifeq ($(OPTIMIZED),1)
+  LOCAL_CXXFLAGS = -O2
+  DEBUG_PLATFORM =
+else
+  LOCAL_CXXFLAGS = -D_CVC3_DEBUG_MODE -g -O0
+  DEBUG_PLATFORM = -debug
+endif
+endif
+endif
+endif
+
+ifeq ($(GCOV),1)
+  LOCAL_CXXFLAGS += -fprofile-arcs -ftest-coverage
+  GTOOLS_PLATFORM = -gcov
+else
+ifeq ($(GPROF),1)
+  LOCAL_CXXFLAGS += -pg
+  GTOOLS_PLATFORM = -gprof
+endif
+endif
+
+PLATFORM_WITH_OPTIONS = $(PLATFORM)$(DEBUG_PLATFORM)$(GTOOLS_PLATFORM)
+
+##################################################
+# Set variables to defaults if not already set
+##################################################
+
+ifdef BASE_DIR
+  SRC_DIR = $(BASE_DIR)
+  OBJ_DIR = $(BASE_DIR)/obj/$(PLATFORM_WITH_OPTIONS)
+else
+  BASE_DIR=$(TOP)
+endif
+
+ifndef SRC_DIR
+  SRC_DIR = $(TOP)/src/$(MODULE)
+endif
+
+ifndef OBJ_DIR
+  OBJ_DIR = $(TOP)/obj/$(MODULE)/$(PLATFORM_WITH_OPTIONS)
+endif
+
+ifndef EXE_DIR
+  EXE_DIR=$(BASE_DIR)/bin/$(PLATFORM_WITH_OPTIONS)
+endif
+
+ifndef LIB_DIR
+  LIB_DIR = $(TOP)/lib/$(PLATFORM_WITH_OPTIONS)
+endif
+
+#Default C++ suffix is cpp
+ifndef CPPSUFFIX
+  CPPSUFFIX = cpp
+endif
+
+#Default compiler/linker is g++
+ifndef CXX
+  CXX = g++
+endif
+
+#Default linker is same as CXX
+ifndef LD
+  LD = $(CXX)
+endif
+
+#Default include directory is current directory
+ifndef INCLUDE_DIR
+  INCLUDE_DIR=-I.
+endif
+
+#Default directory for link libraries is current directory
+ifndef LD_LIB_DIR
+  LD_LIB_DIR=-L.
+endif
+
+#If TRANSIENT is defined, clean will remove those files
+#automatically.  By default, no transient files.
+ifndef TRANSIENT
+  TRANSIENT=
+endif
+
+#Default is to build individual shared libraries
+ifndef BUILD_SHARED_LIB
+  BUILD_SHARED_LIB=1
+endif
+
+LOCAL_CXXFLAGS += -Wall $(INCLUDE_DIR)
+
+ifdef EXTRAFLAGS
+  LOCAL_CXXFLAGS += $(EXTRAFLAGS)
+endif
+
+##################################################
+# Objects from Sources
+##################################################
+
+OBJ = $(patsubst %.$(CPPSUFFIX), $(OBJ_DIR)/%.o, $(SRC))
+
+$(OBJ_DIR)/%.o :	%.$(CPPSUFFIX)
+	@mkdir -p $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(LOCAL_CXXFLAGS) $(CPPFLAGS) -c $< -o '$@'
+
+##################################################
+# executables and libraries
+##################################################
+
+.PHONY: all depend clean real_clean spotty print_src
+
+ifeq ($(STATIC),1)
+  STATIC_FLAG_TARGET = $(STATIC_FLAG)
+  LIB_SUFFIX = $(STATIC_LIB_SUFFIX)
+  EXE_DIR_STATIC_OR_DYNAMIC = $(EXE_DIR)/static
+else
+  STATIC_FLAG_TARGET =
+  LIB_SUFFIX = $(SHARED_LIB_SUFFIX)
+  EXE_DIR_STATIC_OR_DYNAMIC = $(EXE_DIR)
+endif
+
+ifdef EXECUTABLE
+# Compile executable
+
+BUILD_SPECIFIC_TARGET = $(EXE_DIR_STATIC_OR_DYNAMIC)/$(EXECUTABLE)$(EXEEXT)
+BUILD_INDEPENDENT_TARGET = $(BASE_DIR)/bin/$(EXECUTABLE)$(EXEEXT)
+
+all:
+	$(MAKE) $(BUILD_SPECIFIC_TARGET)
+	@rm -f $(BUILD_INDEPENDENT_TARGET)
+	ln -sf $(BUILD_SPECIFIC_TARGET) $(BUILD_INDEPENDENT_TARGET)
+
+$(BUILD_SPECIFIC_TARGET): $(OBJ) $(OTHER_OBJ) $(OTHER_DEPENDENCIES)
+	@mkdir -p $(EXE_DIR_STATIC_OR_DYNAMIC)
+	$(LD) $(STATIC_FLAG_TARGET) $(CXXFLAGS) $(LOCAL_CXXFLAGS) $(LDFLAGS) -o '$@' $(OBJ) \
+	$(OTHER_OBJ) $(LD_LIB_DIR) $(LD_LIBS)
+else
+ifdef LIBRARY
+# Compile library
+
+SHARED_LIBRARY = $(patsubst %.$(STATIC_LIB_SUFFIX),%.$(SHARED_LIB_SUFFIX),$(LIBRARY))
+
+STATIC_LIB_TARGET = $(LIB_DIR)/$(LIBRARY)
+SHARED_LIB_TARGET = $(LIB_DIR)/$(SHARED_LIBRARY)
+
+BUILD_SPECIFIC_TARGET = $(STATIC_LIB_TARGET)
+
+ifneq ($(STATIC),1)
+ifeq ($(BUILD_SHARED_LIB),1)
+  BUILD_SPECIFIC_TARGET += $(SHARED_LIB_TARGET)
+endif
+endif
+
+all: $(BUILD_SPECIFIC_TARGET)
+
+$(SHARED_LIB_TARGET): $(OBJ) $(OTHER_OBJ)
+	@mkdir -p $(LIB_DIR)
+	$(CXX) $(SHARED) -o '$@' $(OBJ) $(OTHER_OBJ)
+
+$(STATIC_LIB_TARGET): $(OBJ) $(OTHER_OBJ)
+	@mkdir -p $(LIB_DIR)
+	ar ruvs '$@' $(OBJ) $(OTHER_OBJ)
+	@#ranlib '$@'
+
+else
+  LIB_OR_EXE = 0
+endif
+endif
+
+ifeq ($(LIB_OR_EXE),0)
+else
+
+##################################################
+# depend
+##################################################
+
+MAKEFILE_DEPS=$(OBJ_DIR)/Makefile.deps
+MAKEFILE_DEPS_TMP=$(OBJ_DIR)/Makefile.tmp
+MAKEFILE_DEPS_TMP2=$(OBJ_DIR)/Makefile.tmp2
+
+ifndef MY_DEPEND
+
+depend:	$(SRC) $(HEADERS) $(OTHER_DEPEND)
+	@mkdir -p $(OBJ_DIR)
+	@-rm -f $(MAKEFILE_DEPS) $(MAKEFILE_DEPS_TMP) $(MAKEFILE_DEPS_TMP2)
+	@echo '# Dependencies for C++ files' >> $(MAKEFILE_DEPS_TMP)
+	@echo >> $(MAKEFILE_DEPS_TMP)
+	@echo "Making dependencies for $(SRC)"
+	$(CXX) -M $(CXXFLAGS) $(LOCAL_CXXFLAGS) $(CPPFLAGS) $(SRC) >> $(MAKEFILE_DEPS_TMP)
+	@echo >> $(MAKEFILE_DEPS_TMP)
+	@sed -e '/^.*:/ s#^#$(OBJ_DIR)/#' < $(MAKEFILE_DEPS_TMP) > $(MAKEFILE_DEPS_TMP2)
+	@cat $(MAKEFILE_DEPS_TMP2) > $(MAKEFILE_DEPS)
+	@rm -f $(MAKEFILE_DEPS_TMP) $(MAKEFILE_DEPS_TMP2)
+
+endif
+
+$(MAKEFILE_DEPS): $(SRC) $(HEADERS) $(OTHER_DEPENDENCY_MAKEFILES)
+		@mkdir -p $(OBJ_DIR)
+		@touch $(MAKEFILE_DEPS)
+		@$(MAKE) --no-print-directory depend
+
+##################################################
+# clean
+#
+# Remove all generated files.
+##################################################
+clean:	$(MAKEFILE_DEPS)
+	rm -f $(OBJ) $(BUILD_SPECIFIC_TARGET) $(TRANSIENT) $(MAKEFILE_DEPS) \
+	$(MAKEFILE_DEPS_TMP) $(MAKEFILE_DEPS_TMP2) $(BUILD_INDEPENDENT_TARGET)
+
+distclean:
+	rm -f $(TRANSIENT)
+
+##################################################
+# spotty
+#
+# Remove just the executable or library
+##################################################
+spotty:	
+	rm -f $(BUILD_SPECIFIC_TARGET) $(BUILD_INDEPENDENT_TARGET)
+
+
+##################################################
+# print_src
+# 
+# Print all the source files (*.cpp and *.h) for the module
+##################################################
+
+ifndef FILELIST
+FILELIST = /dev/null
+endif
+
+# Normally, *.cpp files are the sources.  However, if SRC includes
+# dynamically generated files (e.g. parser files from *.lex and
+# *.yacc), then SRC_ORIG must be defined to include the true source
+# files.
+ifndef SRC_ORIG
+SRC_ORIG = $(SRC)
+endif
+
+print_src:
+	echo "Collecting files from " src/$(MODULE)
+	@echo $(patsubst %, src/$(MODULE)/%, $(SRC_ORIG)) \
+             $(patsubst %, src/$(MODULE)/%, $(HEADERS)) \
+             src/$(MODULE)/Makefile \
+      >> $(FILELIST)
+
+-include $(MAKEFILE_DEPS)
+
+endif

@@ -1,0 +1,25 @@
+/*!
+
+\mainpage CVC3 Documentation
+
+<strong>User's Manual</strong>:
+
+- \ref user_doc
+
+<strong>Documentation Files From the Source Code Distribution:</strong>
+
+- \ref README
+- \ref LICENSE
+- \ref INSTALL
+<!--
+- \ref WINDOWS_README
+- \ref WINDOWS_INSTALL
+-->
+
+Go back to the <a href="http://www.cs.nyu.edu/acsys/cvc3/">CVC3 Home Page</a>
+
+<!-- - \ref theory_api_howto -->
+
+<hr>
+
+*/

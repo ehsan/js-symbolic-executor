@@ -1,0 +1,167 @@
+<!--
+ Copyright 2010 Google Inc.
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+-->
+
+<project name="js-symbolic-executor" basedir="." default="jar">
+  <property name="src.dir" value="${basedir}/src" />
+  <property name="test.dir" value="${basedir}/test" />
+  <property name="build.dir" value="${basedir}/build" />
+  <property name="classes.dir" value="${build.dir}/classes" />
+  <property name="testClasses.dir" value="${build.dir}/test" />
+  <property name="lib.dir" value="${basedir}/lib" />
+  <property name="out.jar" value="${lib.dir}/js-symbolic-executor.jar"/>
+  <property name="cvc3.jar" value="libcvc3-3.0.0.jar"/>
+
+  <path id="classpath">
+    <pathelement location="${lib.dir}/${cvc3.jar}" />
+    <pathelement location="${lib.dir}/guava-r06.jar" />
+    <pathelement location="${lib.dir}/compiler.jar" />
+    <pathelement location="${lib.dir}/js.jar"/>
+  </path>
+
+  <path id="junit-classpath">
+    <path refid="classpath"/>
+    <pathelement location="${lib.dir}/junit-4.8.2.jar" />
+    <pathelement location="${out.jar}"/>
+    <pathelement location="${classes.dir}"/>
+    <pathelement location="${testClasses.dir}"/>
+  </path>
+
+  <target name="clean" description="delete generated files">
+    <delete dir="${build.dir}" />
+    <delete file="${lib.dir}/compiler.jar"/>
+    <delete file="${lib.dir}/${cvc3.jar}"/>
+    <delete file="${out.jar}"/>
+  </target>
+
+  <target name="clean-all"
+	  depends="clean"
+	  description="delete all generated files">
+    <ant dir="../closure-compiler"
+	 inheritAll="false"
+	 antfile="build.xml"
+	 target="clean" />
+    <exec dir="../cvc3" executable="/usr/bin/make">
+      <arg value="clean"/>
+    </exec>
+  </target>
+
+  <target name="init">
+    <mkdir dir="${build.dir}" />
+    <mkdir dir="${build.dir}/classes" />
+  </target>
+
+  <target name="compile" depends="init,closure-compiler,cvc3">
+    <javac srcdir="${src.dir}"
+	   destdir="${classes.dir}"
+	   classpathref="classpath" />
+  </target>
+
+  <target name="jar" depends="compile">
+    <manifestclasspath property="jar.classpath"
+		       jarfile="${out.jar}">
+      <classpath>
+	<path refid="classpath"/>
+	<pathelement location="${classes.dir}"/>
+      </classpath>
+    </manifestclasspath>
+    <jar basedir="${src.dir}" destfile="${out.jar}">
+      <manifest>
+	<attribute name="Main-Class" value="symbolicexecutor.SymbolicExecutor"/>
+	<attribute name="Class-Path" value="${jar.classpath}"/>
+      </manifest>
+    </jar>
+  </target>
+
+  <target name="closure-compiler">
+    <ant dir="../closure-compiler"
+	 inheritAll="false"
+	 antfile="build.xml"
+	 target="jar" />
+    <copy file="../closure-compiler/build/compiler.jar"
+	  todir="${lib.dir}" />
+  </target>
+
+  <target name="check-config.status">
+    <available file="../cvc3/config.status" property="config.status.present"/>
+  </target>
+
+  <target name="configure-cvc3"
+	  depends="check-config.status"
+	  unless="config.status.present">
+    <property name="arith" value="gmp"/>
+    <exec dir="../cvc3" executable="./configure">
+      <arg value="--enable-java"/>
+      <arg value="--enable-dynamic"/>
+      <arg value="--with-arith=${arith}"/>
+    </exec>
+  </target>
+
+  <target name="cvc3"
+	  depends="configure-cvc3,check-config.status"
+	  unless="config.status.present">
+    <exec dir="../cvc3" executable="/usr/bin/make"/>
+    <copy file="../cvc3/java/lib/${cvc3.jar}" todir="${lib.dir}" />
+  </target>
+
+  <target name="compile-tests" depends="jar">
+    <mkdir dir="${build.dir}/test"/>
+    <javac srcdir="${test.dir}"
+	   destdir="${testClasses.dir}"
+	   classpathref="junit-classpath"/>
+  </target>
+
+  <target name="test" depends="compile-tests">
+    <junit fork="yes">
+      <env key="LD_LIBRARY_PATH" path="../cvc3/java/lib:../cvc3/lib" />
+      <classpath refid="junit-classpath"/>
+      <batchtest>
+	<formatter type="plain" usefile="false" />
+        <fileset dir="${testClasses.dir}">
+          <include name="**/*Test.class" />
+	  <exclude name="**/RhinoTest.class"/>
+	  <exclude name="**/Cvc3Test.class"/>
+        </fileset>
+      </batchtest>
+    </junit>
+  </target>
+
+  <target name="test-rhino" depends="compile-tests"
+	  description="See some Rhino return values">
+    <junit>
+      <classpath refid="junit-classpath"/>
+      <batchtest>
+	<formatter type="plain" usefile="false" />
+        <fileset dir="${testClasses.dir}">
+          <include name="**/RhinoTest.class"/>
+        </fileset>
+      </batchtest>
+    </junit>
+  </target>
+
+  <target name="test-cvc3" depends="compile-tests"
+	  description="Make sure that cvc3 runs properly">
+    <junit fork="yes">
+      <env key="LD_LIBRARY_PATH" path="../cvc3/java/lib:../cvc3/lib" />
+      <classpath refid="junit-classpath"/>
+      <batchtest>
+	<formatter type="plain" usefile="false" />
+        <fileset dir="${testClasses.dir}">
+          <include name="**/Cvc3Test.class"/>
+        </fileset>
+      </batchtest>
+    </junit>
+  </target>
+</project>

@@ -1,0 +1,1658 @@
+/*!
+
+\page theory_api_howto HOWTO Write a Decision Procedure
+
+Note: This document is under construction.  Some newer aspects of adding a
+decision procedure are not yet documented here.  Please let us know if you have
+a question that is not answered here.
+
+\section theory_api_contents Contents
+
+<ul>
+<li>\ref theory_api_prelim
+  <ul>
+  <li>\ref theory_api_files
+  <li>\ref theory_api_naming
+  <li>\ref theory_api_general
+  </ul>
+<li>\ref theory_api_addnew
+  <ul>
+   <li>\ref theory_api_start
+   <li>\ref theory_api_config
+   <li>\ref theory_api_header
+   <li>\ref theory_api_expr
+     <ul>
+      <li>\ref theory_api_kind_decl
+      <li>\ref theory_api_kind_reg
+      <li>\ref theory_api_expr_subclass
+      <li>\ref theory_api_methods
+     </ul>
+  </ul>
+<li>\ref theory_api_invars
+  <ul>
+  <li>\ref theory_api_flow
+  <li>\ref theory_api_backtrack
+  <li>\ref theory_api_ileaves
+  <li>\ref theory_api_inputs
+     <ul>
+     <li>\ref theory_api_assertFact
+     <li>\ref theory_api_checkSat
+     <li>\ref theory_api_setup
+     <li>\ref theory_api_update
+     <li>\ref theory_api_addSharedTerm
+     <li>\ref theory_api_rewrite
+     <li>\ref theory_api_solve
+     <li>\ref theory_api_computeType
+     <li>\ref theory_api_computeTCC
+     <li>\ref theory_api_notifyInconsistent
+     <li>\ref theory_api_print
+     <li>\ref theory_api_parseExprOp
+     </ul>
+  <li>\ref theory_api_outputs
+     <ul>
+     <li>\ref theory_api_enqueueFact
+     <li>\ref theory_api_setInconsistent
+     <li>\ref theory_api_simplifyThm
+     <li>\ref theory_api_enqueueEquality
+     <li>\ref theory_api_inconsistentThm
+     <li>\ref theory_api_isTerm
+     <li>\ref theory_api_isLiteral
+     <li>\ref theory_api_isAtomic
+     <li>\ref theory_api_updateHelper
+     <li>\ref theory_api_getType
+     <li>\ref theory_api_getTCC
+     <li>\ref theory_api_parseExpr
+     </ul>
+  </ul>
+<li>\ref theory_api_proofs
+   <ul>
+   <li>\ref theory_api_proof_classes
+   <li>\ref theory_api_proof_rule
+   </ul>
+</ul>
+
+\section theory_api_prelim Preliminaries and Coding Guidelines
+
+\subsection theory_api_files Directory Structure and Files
+
+Each theory (a.k.a. decision procedure, or DP) must reside in a
+directory <tt>src/theory_foo</tt> (where <tt>foo</tt> is the theory
+name).  All the sounce files and <tt>Makefile.in</tt> must be in that
+directory, except for some shared header files, which must reside in
+the common directory <tt>src/include</tt>.  In particular,
+<tt>theory_foo.h</tt> must be placed in <tt>src/include</tt>.
+
+The master source file for a theory should be called
+<tt>theory_foo.cpp</tt>.  Typically, a new theory needs its own set of
+proof rules, which are implemented as three files:
+<tt>foo_proof_rules.h</tt>, <tt>foo_theorem_producer.h</tt>, and
+<tt>foo_theorem_producer.cpp</tt>.  The first one is the abstract
+interface to the rules, which the untrusted DP code can
+<tt>\#include</tt>.  The other two files implement this abstract API,
+and comprise the trusted part of the code.  All these files should be
+placed in <tt>src/theory_foo</tt>.
+
+\subsection theory_api_naming Naming Convensions
+
+Each individual theory is a subclass of a Theory class, and therefore,
+its name should be <tt>class TheoryFoo</tt>.
+
+A theory may define several methods for creating expressions in
+<tt>theory_foo.h</tt>.  Typically, they are named as
+<tt>barExpr()</tt>, <tt>bazExpr()</tt>, etc.  For instance,
+<tt>theory_arith.h</tt> defines plusExpr(), minusExpr(), etc.  These
+functions are most useful if they are declared as non-member functions
+(not part of the class <tt>TheoryFoo</tt>), since then they can be
+called directly by the CVC3 library users.
+
+It is also convenient to define testers like <tt>isBar()</tt> and
+<tt>isBaz()</tt>, which return true for the corresponding expressions.
+For example, <tt>theory_arith.h</tt> defines <tt>isPlus()</tt>,
+<tt>isMinus()</tt>, etc.
+
+Of course, the rest of the code should follow our general naming and
+coding guidelines described at length in the project FAQ:
+http://verify.stanford.edu/savannah/faq/?group_id=1&question=How_Do_I_Become_A_CVC3_Developer.txt .
+
+\subsection theory_api_general General Guidelines
+
+The Theory API is designed to minimize the changes in the central
+(core) files when adding a new theory.  Ideally, only
+<tt>src/vcl/vcl.cpp</tt> file needs to be modified to add a
+constructor call to the new theory.  Everything else --- kinds,
+special expression subclasses, types, etc. --- can (and should) be
+defined locally in the theory-specific files.
+
+There are several important guidelines for writing
+proof rules specific to your theory:
+
+<ul>
+<li>Each proof rule must be mathematically sound.
+
+<li>It is a mortal sin to introduce a proof rule without a proper
+doxygen comment concisely and clearly describing what it does.
+
+<li>The code must contain enough <tt>CHECK_SOUND</tt> checks to
+guarantee that all the premises are of the right form, and all the
+side conditions of the rule are satisfied.  That is, if these
+soundness checks pass, then the rule application is guaranteed to be
+sound mathematically.
+
+<li>Keep the code in each rule as clean and simple as possible, so
+that the correctness of the implementation w.r.t. the mathematical
+formulation can be easily checked by manual inspection.  That is, many
+simple and independent rules are strongly preferred to a few big
+mega-rules.
+
+<li>Avoid calling other proof rules from within a proof rule.  Rule of
+thumb: if your rule has to use other rules, most likely, it is a
+<em>strategy</em> (a derived rule), and should be implemented in the
+untrusted part of the code (e.g. in <tt>theory_foo.cpp</tt>).
+
+</ul>
+
+More details are given in the separate 
+\ref theory_api_proofs "section on proof rules".
+
+Finally, and <em>most importantly</em>: <strong>document your
+code!!</strong>
+
+Every method, variable, class, or type should have a doxygen-style
+comment with <em>at least</em> a brief description:
+
+\verbatim
+//! Convert Blah expression to Baz value
+Baz Blah2Baz(const Blah& b);
+\endverbatim
+
+Imagine telling such a description to your colleague who has very
+faint idea of what you are coding.  If a brief description does not
+make sense to him/her, or the function does something non-trivial or
+non-obvious, add a longer description:
+
+\verbatim
+//! Convert Blah expression to Baz value
+/*!
+ * Recursively descend into Blah, collect every Foo-leaf, order them in
+ * the descending order of Baz-ability, and wrap into the Baz expression.
+ * 
+ * \param b is a non-trivial Blah value (otherwise we assert-fail).
+ */
+Baz Blah2Baz(const Blah& b);
+\endverbatim
+
+Often it is convenient to keep the brief description in the
+<tt>*.h</tt> file, and the long description in the corresponding
+<tt>*.cpp</tt> file.
+
+The only exceptions are the \ref theory_api "Theory API methods", for
+which no documentation is necessary, since these are already
+documented in <tt>theory.h</tt>.
+
+\section theory_api_addnew Adding New Theory
+
+\subsection theory_api_start Before You Start...
+
+...Make sure you have a very good idea about what your new decision
+procedure is supposed to do, why it is useful, and what exactly it
+decides.
+
+Next, write down all the definitions mathematically and phrase the
+scope of the new theory in terms of a logic with a particular
+signature (the set of predefined interpreted and uninterpreted symbols
+that belong to this theory).  Make sure this signature is disjoint
+from all the other theories (this is <strong>very important</strong>,
+since CVC3 is based on Nelson-Oppen combination result, and
+requires signatures to be disjoint).
+
+Your decision procedure should decide inconsistency of a set of
+formulas in the above logic.  Make sure you actually know an algorithm
+for that.  While it is possible to add undecidable or incomplete
+theories to CVC3 (and we already have some), those should only be
+used for a very good reason.  Otherwise, make sure you know that your
+algorithm is sound, complete, and terminating.
+
+Take the above algorithm and make it an <em>online</em> one.  That is,
+your algorithm should be able to accept a new formula at any point in
+time, and perform some incremental computation to take that formula
+into account.  This is usually the most complicated step as far as the
+math is concerned.  I will explain this step in detail in section \ref
+theory_api_invars "Theory API" below.
+
+If you are adding your theory to the official CVC3 code base,
+<strong>discuss your ideas on the mailing
+list!</strong> Yes, <strong>do</strong> it, I mean it.  If you do not,
+we will notice your sneaky additions right away, and will ask many
+difficult questions in public.  So, you may as well just announce it
+yourself.
+
+\subsection theory_api_config Configure and Makefiles
+
+Now you are ready to begin.  Pick a name for your new theory, say,
+<em>Foo</em>, and do the following steps.
+
+- Create a new CVS branch.  You already know how to do this, right?
+If not, read the FAQ:
+http://verify.stanford.edu/savannah/faq/?group=vergrp .
+Read it <strong>NOW</strong>.
+
+- Create a directory <tt>src/theory_foo</tt>, add it to CVS
+
+- Create the following files (either empty or copy them from an
+  existing theory), and add them <strong>to your new CVS branch</strong>:
+   <dl>
+   <dt>In <tt>src/include/</tt></dt>
+       <dd><tt>theory_foo.h</tt></dd>
+   <dt>In <tt>src/theory_foo/</tt></dt>
+       <dd><tt>theory_foo.cpp</tt><br>
+       <tt>Makefile.in</tt></dd>
+   </dl>
+  If your new theory needs to create new custom proof rules, also
+  create
+   <dl>
+   <dt>in <tt>src/theory_foo/</tt></dt>
+       <dd><tt>foo_proof_rules.h</tt><br>
+       <tt>foo_theorem_producer.h</tt><br>
+       <tt>foo_theorem_producer.cpp</tt></dd>
+   </dl>
+  While you at it, add the <strong>required header comment</strong> to
+  each source file (*.h and *.cpp), with the appropriately modified
+  file name, author, date, and an optional description <em>after</em>
+  the license excerpt.  Look at any existing source file for a
+  template.
+- Edit <tt>src/theory_foo/Makefile.in</tt> appropriately (look for a
+  template from some other theory, for example,
+  <tt>theory_array</tt>).  You need to modify the values of:
+  - <tt>LIBRARY</tt>
+  - <tt>LOCAL_OBJ_DIR</tt> and <tt>LOCAL_SRC_DIR</tt>
+  - <tt>SRC</tt>
+  - <tt>HEADERS</tt> (if you created any *.h files in
+    <tt>src/theory_foo/</tt>, such as <tt>foo_proof_rules.h</tt>).
+- Edit <tt>src/Makefile.in</tt> (it is a common Makefile for all theories):
+   - Add <tt>theory_foo.h</tt> to <tt>HEADER_NAMES</tt>
+   - Add <tt>cd theory_foo \&\& \$(MAKE) \$(TARGET)</tt> to
+     <tt>build:</tt> target
+   - Add <tt>theory_foo</tt> entry to <tt>CVC_LIB_NAMES</tt>
+- Edit <tt>configure.in</tt>:
+  - Add an entry <tt>\$CVC_SRC_SUBDIR/theory_foo/Makefile</tt> to
+    <tt>CVC_OUTPUT_FILES</tt> variable
+- Run <tt>autoheader</tt>, <tt>autoconf</tt>, <tt>./configure</tt>.
+- Edit <tt>src/vcl/vcl.cpp</tt> to add a call to your theory's constructor:
+  - Add <tt>\#include "theory_foo.h"</tt> at the top;
+  - Add <tt>d_theories.push_back(new TheoryFoo(this));</tt> to
+    the end of VCL::VCL() constructor.
+
+File <tt>src/vcl/vcl.cpp</tt> is <strong>the only source file</strong>
+in the core of CVC3 that you really need to touch in order to add
+a new theory.  If you have to do something else, you are either doing it
+wrong, or there better be a very good reason for it.
+
+Now you are all set for compiling your new code, except that there is
+no code to compile yet...
+
+\subsection theory_api_header Header File: theory_foo.h
+
+The easiest way to start is to use an existing
+<tt>theory_whatever.h</tt> file as a template.  This header file
+should declare the following elements:
+
+<ul>
+<li><tt>class TheoryFoo</tt> as a subclass of <tt>Theory</tt>;
+<li>Non-member (global) functions for creating expressions in your
+    theory, and possibly, testers for those expressions; for instance:
+    <tt>plusExpr()</tt>, <tt>multExpr()</tt>, ..., <tt>isPlus()</tt>,
+    <tt>isMult()</tt>, ...
+<li>Optionally, declaration of new kinds (an <tt>enum</tt> type) used
+in the above expressions.
+</ul>
+
+Declaration of <tt>TheoryFoo</tt> class is required.  Kinds and
+functions for creating new expressions are only needed if you want the
+end-user of the CVC3 library to be able to create expressions from your
+theory and/or refer to their kinds directly.  This is not always
+desirable.  For instance, you may want to generate special terms or
+predicates that only make sense as temporary storage of information
+for <em>your</em> theory.  The <tt>DARK_SHADOW</tt> and
+<tt>GRAY_SHADOW</tt> operators are good examples from the arithmetic
+theory.  You have no clue what I'm talking about?  That's right, you
+get it.
+
+\subsection theory_api_expr Kinds, Expressions, and Types
+
+The purpose of a new theory (or a <em>decision procedure</em>) is to
+extend the existing logic of CVC3 with new interpreted, and
+sometimes uninterpreted, operators and symbols.  These new symbols
+comprise a <em>signature</em> of the theory, and it must be disjoint
+from the signatures of the other theories.
+
+In code, the new symbols and operators translate into new kinds of
+expressions.  That is, new <em>kinds</em> and new values of the
+<tt>Expr</tt> class.
+
+A <em>kind</em> is a natural number which uniquely determines what
+sort of expression it is (variable, uninterpreted function symbol,
+specific operator like plus, minus, a type expression, etc.).  Kinds
+are also used to define your <em>theory's signature</em>, and hence,
+they must be unique to your theory.
+
+In the simplest case, a kind represents the entire expression or type.
+Examples are simple types (like <tt>REAL</tt> and <tt>INT</tt>) and
+some constants (e.g. <tt>TRUE</tt> and <tt>FALSE</tt>).
+
+More typically, however, a kind represents an operator (<tt>PLUS</tt>,
+<tt>MINUS</tt>, ...), and children of an expression of that kind are
+the arguments of that operator.
+
+Finally, some kinds are used by more complex expressions with
+additional non-term attributes.  For example, <tt>REC_LITERAL</tt> is
+used by record expressions { f1=e1, f2=e2, ... } whose children are
+the values of the fields (e1, e2, ...), and an additional attribute is
+the vector of field names: (f1, f2, ...).  Other examples are
+quantifiers and lambda-terms.  Such expressions require not only a new
+kind declaration, but also a special subclass of <tt>ExprValue</tt>
+(see below).
+
+\subsection theory_api_kind_decl Kind Declaration
+
+Kinds are declared as elements of an <tt>enum</tt> type (with doxygen
+comments):
+
+\verbatim
+//! Local kinds of TheoryFoo
+typedef enum {
+  FOO_TYPE = 3500,   //!< Type FOO for the elements of this theory
+  BAR,               //!< The binary (x | y) operator, where x,y: FOO
+  BAZ,               //!< Unary buzz(x) predicate
+  BLEAH              //!< An internal auxiliary term
+} FooKind;
+\endverbatim
+
+Notice, that the numbering in this example starts from 3500.  This can
+be any integer which ensures that the new kinds do not clash with the
+existing kinds in other theories.  Pick a random one, see if your
+kinds don't clash with others.  You can check this either by
+inspecting <tt>src/include/kinds.h</tt> (the cental declaration of
+core kinds) and all the other theories, or compile and run
+<tt>cvc3</tt> to see if you get an error message about kinds
+registered twice.
+
+The above type declaration of <tt>FooKind</tt> can be either in
+<tt>src/include/theory_foo.h</tt> (usually the best place), or in some
+header file in <tt>src/theory_foo/</tt> directory, depending on
+whether you want to expose your kinds to the end library user or not.
+In the latter case, do not forget to add that header file to the
+<tt>HEADERS</tt> variable in your <tt>Makefile.in</tt> (see the \ref
+theory_api_config "previous section").
+
+\subsection theory_api_kind_reg Kind  Registration
+
+New kinds must be registered with the expression manager, which is
+done in your theory's constructor (see the  
+\ref theory_api_methods "next section").
+Registration is done by calling <tt>newKind()</tt> method of
+<tt>ExprManager</tt> for each kind:
+
+\verbatim
+getEM()->newKind(FOO_TYPE, "FOO");
+getEM()->newKind(BAR, "||");
+....
+\endverbatim
+
+The string in the second argument is for printing the kind by the
+pretty-printer, and also for parsing, that is, turning a string back
+into a number (the kind).
+
+\subsection theory_api_expr_subclass New Expression Subclasses
+
+Sometimes an expression has a more complicated structure than a fixed
+operator with arguments, and more sophisticated data structures are
+necessary to represent it.  CVC3 has an API for declaring and
+registering a new <em>expression subclass</em> just for that purpose.
+
+An expression subclass is a subclass of \ref ExprValue "ExprValue".
+You can declare it where appropriate in your theory
+files, using the same judgement as for the kinds.  The new subclass
+needs to be registered with \c ExprManager by calling
+<tt>registerSubclass()</tt> method.
+
+A subclass of <tt>ExprValue</tt> <strong>must</strong> implement the
+following methods:
+
+\verbatim
+size_t computeHash() const;
+size_t getMMIndex() const;
+int isGeneric() const { return getMMIndex(); }
+bool isGeneric(int idx) const { return (idx == getMMIndex()); }
+// Syntactic equality of two expressions
+bool operator==(const ExprValue& ev2) const;
+// Make a clean copy of itself using the given memory manager
+ExprValue* copy(MemoryManager* mm, ExprIndex idx = 0);
+\endverbatim
+
+Also, each subclass must overload <tt>new()</tt> and <tt>delete()</tt>
+as follows:
+
+\verbatim
+void* operator new(size_t, MemoryManager* mm) {
+  return mm->newData();
+}
+void operator delete(void*) { }
+\endverbatim
+
+Subclasses may overload other virtual methods of <tt>ExprValue</tt> as
+needed.  For instance, <tt>arity()</tt>, <tt>getKids()</tt>,
+<tt>ExprValueGenericAttr "getXXXAttr"()</tt>, etc.  Some standard
+attribute access functions can also be overloaded,
+e.g. <tt>getString()</tt>, <tt>getRational()</tt>.
+
+However, you should <strong>not</strong> overload testers such as
+<tt>isRecord()</tt>, <tt>isVar()</tt> and such (unless you really know
+what you are doing), since the core relies on specific properties of
+the corresponding subclasses.
+
+For example, let us say that the auxiliary term <tt>BLEAH</tt> in
+<tt>TheoryFoo</tt> needs a string attribute, which is a part of
+expression, but is not a child (and not even a term in the logic), and
+an integer attribute which is not part of the expression (e.g. it is
+needed for marking expressions during the algorithm run).  An example
+of a new subclass for this expression is the following:
+
+\verbatim
+  class BleahExpr: public ExprValue {
+  private:
+    string d_str; //!< Data field; defines the value of expression
+    int d_int;    //!< An attribute
+    size_t d_MMIndex; //!< The registration index for ExprManager
+  public:
+    //! Constructor
+    BleahExpr(ExprManager* em, const string& str,
+	      size_t mmIndex, ExprIndex idx = 0)
+     : ExprValue(em, ARRAY_VAR, idx), d_str(str),
+       d_int(0), d_MMIndex(mmIndex) { }
+    
+    //! String attribute (part of expression)
+    const std::string& getString() const { return d_str; }
+
+    //! Integer attribute (not part of expression)
+    int& getIntAttr(int idx) { return d_int; }
+    size_t getIntAttrSize() const { return 1; }
+    
+    ExprValue* copy(MemoryManager* mm, ExprIndex idx = 0) const {
+      return new(mm) BleahExpr(d_em, d_str, d_MMIndex, idx);
+    }
+    
+    size_t computeHash() const {
+      return PRIME*ExprValue::hash(BLEAH)+s_charHash(d_str.c_str());
+    }
+
+    size_t getMMIndex() const { return d_MMIndex; }
+    size_t isGeneric() const { return getMMIndex(); }
+    bool isGeneric(size_t idx) const { return (idx == getMMIndex()); }
+
+    // Only compare the string, not the integer attribute
+    bool operator==(const ExprValue& ev2) const {
+      if(ev2.getMMIndex() != d_MMIndex) return false;
+      return (d_str == ev2.getString());
+    }
+
+    void* operator new(size_t, MemoryManager* mm) {
+      return mm->newData();
+    }
+    void operator delete(void*) { }
+  };
+\endverbatim
+
+Registration of this subclass generates a memory manager index, which
+must be stored somewhere, usually in a class variable of
+<tt>TheoryFoo</tt>, say <tt>d_bleahIdx</tt> of type size_t.  Registration in this
+case should be done in the constructor of <tt>TheoryFoo</tt>:
+
+\verbatim
+d_bleahIndex = getEM()->registerSubclass(sizeof(BleahExpr));
+\endverbatim
+
+The approved and recommended way of <strong>creating
+expressions</strong> of <tt>BLEAH</tt> kind is the following:
+
+\verbatim
+Expr bleahExpr(const string& s) {
+  BleahExpr av(d_em, s, d_BleahIndex);
+  return newExpr(&av);
+}
+\endverbatim
+
+Using the new expression is now very easy: 
+
+\verbatim
+Expr bleah = bleahExpr("cow moo"), b2 = bleahExpr("asdfqwerty");
+bleah.getIntAttr(0) = 42;
+if(bleah != b2)
+  cout << bleah.getString() << b2.getIntAttr(0) << endl;
+\endverbatim
+
+Note that it is impossible to define a non-member expression creation
+function for <tt>BleahExpr</tt>, since the memory manager index is
+stored in the class-local variable of <tt>TheoryFoo</tt>.  And
+<strong>don't even think</strong> of using a static variable to work
+around this limitation.
+
+In general, you should <strong>NEVER</strong> store anything in a
+static variable, since it may violate thread-safety of the library.
+Before you ever think of using a static variable for anything, think
+what happens if someone creates two copies of the system (with two
+different sets of expression and memory managers).  Is it safe to
+share this variable among several system instances?  In the case of
+the memory manager index, the answer is <em>definitely not</em>.
+
+One possible fix for this problem is to bind the memory manager to the
+kind(s) that the subclass uses.  Let us know if you really need this
+feature, and it will be implemented.
+
+
+\subsection theory_api_methods Constructor and API Methods
+
+The only constructor for your new theory should have the following
+declaration:
+
+\verbatim
+TheoryFoo(VCL* vcl);
+\endverbatim
+
+The constructor has to:
+
+- Initialize the base class,
+- Register new kinds and expression subclasses (if any) with
+<tt>ExprManager</tt>,
+- Collect the kinds which belong to the new theory in a vector, and
+register the theory (method <tt>registerTheory()</tt>) with these
+kinds,
+- Initialize theory-specific data structures, if needed.
+
+Here is a typical example of the constructor implementation:
+
+\verbatim
+TheoryFoo::TheoryFoo(VCL *vcl): Theory(vcl, "Foo") {
+  d_rules = createProofRules(vcl); // instantiate our own rules
+
+  // Register new local kinds with ExprManager
+  getEM()->newKind(FOO_TYPE, "FOO");
+  getEM()->newKind(BAR, "||");
+  getEM()->newKind(BAZ, "BAZ");
+  getEM()->newKind(BLEAH, "BLEAH");
+
+  // Register our expression subclass
+  d_bleahIndex = getEM()->registerSubclass(sizeof(BleahExpr));
+
+  vector<int> kinds;
+  kinds.push_back(FOO_TYPE);
+  kinds.push_back(BAR);
+  kinds.push_back(BAZ);
+  kinds.push_back(BLEAH);
+
+  registerTheory(this, kinds);
+}
+\endverbatim
+
+The following \ref theory_api "Theory API methods" are
+<strong>required</strong> in the subclass:
+
+\verbatim
+  void assertFact(const Theorem& e);
+  void checkSat(bool fullEffort);
+  void computeType(const Expr& e);
+\endverbatim
+
+Other methods are <strong>optional</strong>, but often needed:
+
+\verbatim
+  Theorem rewrite(const Expr& e);
+  void setup(const Expr& e);
+  void update(const Theorem& e, const Expr& d);
+  ExprStream& print(ExprStream& os, const Expr& e);
+  Expr parseExprOp(const Expr& e);
+\endverbatim
+
+Finally, a few other methods are rarely needed in practice:
+
+\verbatim
+  void addSharedTerm(const Expr& e);
+  Theorem solve(const Theorem& e);
+  void notifyInconsistent(const Theorem& thm);
+  Expr computeTCC(const Expr& e);
+\endverbatim
+
+The next section describes these API methods in more detail.  You are
+also strongly encouraged to \ref theory_api "read the documentation"
+on each of these methods.
+
+\section theory_api_invars Theory API: The Very Important Invariants
+
+\subsection theory_api_flow High-Level Information Flow
+
+Every decision procedure communicates with the CVC3 Core
+interactively through several methods, most of which belong to the
+Theory class.  Generally, those methods that your theory class
+re-implements carry information <em>from</em> the core, and others add
+new information generated in the DP <em>to</em> the core.  Some
+methods (like <tt>rewrite()</tt> and <tt>solve()</tt>) return
+information through their return values.
+
+The chart below shows the flow of information to and from the decision
+procedure, and which parts of the core are responsible for collecting
+and generating it.  Thick lines represent the most important methods,
+and dashed lines represent methods used only for very special
+occasions.
+
+\image html theory_api_flow.jpg
+\image latex theory_api_flow.eps "Flow of facts in CVC3" width=6in
+
+The most straightforward path of information, once it gets to the core
+through the external user input, is the following.  First, all the
+relevant terms are typechecked (<tt>computeType()</tt> method).  This
+method implements a step in the recursive typechecking algorithm,
+where the current expression is typechecked based on its structure and
+the types of its children.  Typechecking of children is done by
+calling <tt>getType()</tt> or <tt>getBaseType()</tt>.  The latter
+computes the largest supertype of the expression; for instance, the
+exact type of <tt>x</tt> may be a subrange <tt>0..5</tt>, which is a
+subtype of <tt>INT</tt>, but its base type is <tt>REAL</tt>.  Exact
+and base types are cached on expressions, and are computed on demand.
+
+An important property of <tt>computeType()</tt> is that it must not
+only compute the exact type of the expression, but also verify that
+all subexpressions are type-correct, <em>relative to their base
+types</em>.  For instance, <tt>x = y</tt> has type <tt>BOOLEAN</tt>,
+and it is only type-correct if <tt>getBaseType(x) ==
+getBaseType(y)</tt>.  If this property is violated,
+<tt>TypecheckException</tt> must be thrown with the appropriate
+message.  Note, that the exact types of <tt>x</tt> and <tt>y</tt> may
+be different, and even disjoint.
+
+After the type checking, <em>Type Correctness Conditions</em> (TCCs)
+are generated and checked.  TCC is a formula which is true if and only
+if any partial function in the original formula is used safely
+according to the Kleene semantics.  That is, every partial function is
+either applied only to the arguments in its domain, or its value does
+not influence the value of the formula.
+
+TCCs are computed recursively by <tt>computeTCC()</tt> and
+<tt>getTCC()</tt> methods, very similar to computing the types.  If
+your theory does not introduce partial functions explicitly (like
+division in arithmetic), then you do not need to re-implement
+<tt>computeTCC()</tt> in your theory; the default implementation will
+do the job.
+
+TCCs have a nice property that if they are true in the current
+context, then the corresponding user formulas can be safely
+interpreted by the total 2-valued models.  Hence,
+<tt>computeTCC()</tt> is <strong>the only</strong> Theory API method
+that deals with partiality.  All other methods consider any formula to
+be total (no partial functions) and 2-valued (only <tt>TRUE</tt> or
+<tt>FALSE</tt>, no undefined values.
+
+Once TCC has been proven valid in the current context, the new fact
+(formula) goes to the SAT solver, and if it is a literal (atomic
+formula or its negation), it is submitted to the decision procedure
+through <tt>assertFact()</tt>.  The decision procedure processes this
+fact, updates its internal data structures, and possibly reports a
+contradiction (<tt>setInconsistent()</tt>) or new facts
+(<tt>enqueueFact()</tt>, and in special cases,
+<tt>enqueueEquality()</tt>).  This completes the main loop of
+information flow.
+
+Note, that both <tt>enqueueFact()</tt> and <tt>setInconsistent()</tt>
+deliver information to the same place in the core, except that
+reporting the conflict bypasses the queue, and is taken care of
+immediately, rather than after all the previously enqueued facts are
+processed.  This is the primary reason for having these two functions
+separated (as opposed to having only <tt>enqueueFact()</tt>).
+
+Inside this main loop, <tt>rewrite()</tt> and <tt>solve()</tt> are
+called to transform (or simplify) the facts before they reach the rest
+of the core.  Normally, these functions do not have side-effects
+(except for caching results), and return new (simplified) facts
+through their return values.
+
+When the SAT solver runs out of facts, and the context is still
+satisfiable, it calls <tt>checkSat()</tt> with
+<tt>fullEffort==true</tt>.  At this point, the decision procedure must
+determine whether all the information it has seen so far makes the
+context satisfiable or not w.r.t. its theory.  Just like in the case
+of <tt>assertFact()</tt>, it may either report a contradiction, or
+enqueue a new fact.  If any new fact is enqueued, it starts the main
+loop again.  If <tt>checkSat()</tt> does not generate any new facts
+and does not find a contradiction, the core stops and reports the
+context to be satisfiable.
+
+Method <tt>checkSat()</tt> is also called every time the fact queue
+becomes empty, before the SAT solver asserts a new splitter.  In this
+case, the <tt>fullEffort</tt> argument is set to <tt>false</tt>, and
+the decision procedure is not required to do anything.  Many DPs,
+however, choose to perform some relatively inexpensive checks to
+detect inconsistencies and/or new facts, which increases performance.
+Similarly, if a new fact is enqueued, the main loop continues (without
+the SAT solver asserting new splitters) until the queue is empty.
+
+In CVC3, every term (non-formula expression) has a <em>canonical
+representative</em> in the union-find database.  This database
+represents the equivalence classes of terms w.r.t. logical equality.
+All the terms in the formulas passing through the core are
+<em>simplified</em> by replacing them with their canonical
+representatives. 
+
+Often, a decision procedure wants to be notified when a subexpression
+changes its canonical representative.  For instance, if the DP has
+seen an term <tt>2*x+3*y</tt>, and <tt>x</tt> has changed its
+representative to <tt>y+2</tt>, then it is important to conclude that
+<tt>2*x+3*y == 2*(y+2) + 3*y == 5*y+4</tt>.  For this purpose, the
+core maintains the <em>notify list</em> data structure, which is
+interfaced through <tt>setup()</tt> and <tt>update()</tt> methods.
+
+Every term in the core must be <em>setup</em>, and as a part of that
+process, the method <tt>setup()</tt> of the appropriate DP is called.
+Here the decision procedure has a chance to register notification
+requests related to the given expression.  These requests are added to
+the <em>notify lists</em> of the relevant expressions using
+<tt>Expr::addToNotify()</tt> member method. 
+
+Normally, a DP wants to be notified when immediate children of the
+expression change.  For instance, for an expression <tt>2*x</tt>, if
+the variable <tt>x</tt> changes, the arithmetic DP wants to be
+notified about it.  Therefore, in the <tt>setup(2*x)</tt> call, it
+adds <tt>2*x</tt> to the notify list of <tt>x</tt> by calling
+<tt>x.addToNotify(this, 2*x)</tt>.  The first argument (<tt>this</tt>)
+is the reference to the current Theory subclass.
+
+Later, when <tt>x</tt> changes its canonical representative, say, to
+<tt>y+2</tt>, its notify list is consulted, and the <tt>update(x==y+2,
+2*x)</tt> call is made.  The first argument is a directed equality
+informing the DP of what has changed, and the second is the expression
+for which this change is relevant.  In this particular example,
+<tt>update()</tt> will enqueue a new fact: <tt>2*x==2*y+4</tt>.
+
+Similarly, when <tt>2*x+3*y</tt> is being setup, its immediate
+children (<tt>2*x</tt> and <tt>3*y</tt>) get the entire expression
+added to their notify lists.  Later, when <tt>2*x</tt> changes its
+canonical representative to <tt>2*y+4</tt> due to the previous
+<tt>update()</tt> call, another <tt>update()</tt> call is made with
+<tt>2*x==2*y+4</tt> for <tt>2*x+3*y</tt>, and a new fact is
+enqueued: <tt>2*x+3*y==5*y+4</tt>, and so on.
+
+Note, that the notify list mechanism is not restricted to only
+immediate children.  For instance, for high-degree monomials in
+non-linear arithmetics (e.g. <tt>x^2*y</tt>) it makes sense to
+register them with all factors (in this case, <tt>x</tt>,
+<tt>x^2</tt>, <tt>y</tt>, and <tt>x*y</tt>) which are not necessarily
+subexpressions of the original monomial (<tt>x^2*y</tt>).
+
+Finally, sometimes a decision procedure may want to know that the
+current context has become inconsistent, and this what
+<tt>notifyInconsistent()</tt> call is for.  To date, only the
+quantifier theory uses it to find out which instantiations were useful
+in producing a conflict.  Most likely, you do not need it.
+
+\subsection theory_api_backtrack Backtracking Data Structures
+
+Up to this point, the description assumed that new facts are always
+<em>added</em> to the current logical context, and <em>never
+removed</em>.  This, of course, is not true in reality, since when a
+conflict is found, the SAT solver will <em>backtrack</em>, and
+<em>restore the context</em> to what it was before the assertion of a
+splitter.  In particular, this means that each decision procedure
+needs to restore all its internal state to the same point.  You may
+have noticed that there is no Theory API call to signal such
+backtracking.  How the heck can a DP restore the state if it does not
+know when the core backtracks?
+
+The trick used in CVC3 is actually quite simple and elegant: DP
+<em>does not have to know about backtracking</em>, it indeed works
+under the assumption that facts can only be added to the context.
+However, all of its internal state must be stored in <em>backtracking
+data structures</em>, which backtrack automatically with the core.
+
+Such backtracking data structures are called <em>context-dependent
+objects</em> (CDO).  There are currently three pre-defined
+context-dependent data structures: <em>CDO</em> (context-dependent
+object, <tt>cdo.h</tt>), <em>CDList</em> (backtracking stack,
+<tt>cdlist.h</tt>), and <em>CDMap</em> (backtracking map, similar to
+STL map, <tt>cdmap.h</tt>).
+
+Class CDO is a templated class for any C++ class which can be cleanly
+copied with <tt>operator=()</tt> and copy constructor, and which have
+the default constructor (this is how these objects are saved and
+restored on backtracking).  CDO is best suited for individual
+variables (array indices, <tt>Expr</tt> or <tt>Theorem</tt> variables,
+etc.).
+
+Class CDList is a backtracking stack, and its API is very similar to
+that of STL vector.  You can <tt>push_back()</tt> elements onto the
+stack, check the <tt>size()</tt> of the stack, and look up individual
+elements with <tt>operator[]</tt>.  You <em>cannot</em>, however,
+modify or remove elements from the list.  Keep in mind, that the size
+of the list may change between the API method calls, which means, you
+should keep any persistent indices to the list in backtracking
+variables (CDO).
+
+Class CDMap is a templated class very similar to STL <tt>map</tt>.
+You can add new key-value pairs to it, you can modify the value under
+a key, but you cannot remove a pair from the map.
+
+Let me repeat this again: <strong>all persistent data in a decision
+procedure MUST be stored in backtracking data structures!</strong>
+There are some rare exceptions to the rule (like storing the
+<tt>Expr</tt> representing the value "0" to avoid re-building it), but
+generally, you do not even want to know about backtracking.  It is all
+done under the hood, and you should not care.
+
+\subsection theory_api_ileaves Variables and Foreign Terms (i-Leaves)
+
+Any subterm that your decision procedure cannot recognize must be
+treated as a variable.  This is a very important point, and it may
+cause a long-lasting confusion for the beginning developers if not
+understood from the start.  Read it carefully, several times, until
+you are sure you never forget it, even if I wake you up in the middle
+of the night.
+
+What CVC3 knows as a "variable" has nothing to do with what a
+decision procedure considers a "variable."  These two are not very
+much related.
+
+A variable (or an <em>i-leaf</em>) from the DP point of view is either
+a CVC3 variable, or a <em>shared term</em> from some other theory.
+For instance, in <tt>2*arr[idx]-3*y</tt>, the subterm
+<tt>arr[idx]</tt> belongs to the theory of arrays, and therefore, is a
+variable (an i-leaf) as far as the theory of arithmetic is concerned.
+Similarly, <tt>y</tt> is a variable in the theory of arithmetic,
+because it is also a CVC3 variable.
+
+Such a definition does not provide a direct test for an i-leaf.
+Instead, you have to check whether this term is one of "yours" (one
+that your theory knows about), which is usually determined by the
+expression kind.  If not, then it is a variable, as far as your theory
+is concerned.
+
+But never make any assumptions about an i-leaf; it can be any
+expression whatsoever, and <tt>Expr::isVar()</tt> tester will
+<em>not</em> necessarily return <tt>true</tt> for it.  In other words,
+<em>there is no such thing as a variable</em> in your theory.  There
+are only terms you cannot recognize, which you treat as variables.
+
+\subsection theory_api_inputs Methods Reimplemented in a Subclass
+
+\subsection theory_api_assertFact assertFact()
+
+There are no tricky invariants for this method.  The only important
+property is that all the facts that are submitted to the DP through
+this call become part of the logical context which the DP must check
+for satisfiability.
+
+Mathematically, the asserted fact \f$\phi\f$ is added to the logical
+context \f$\Gamma\f$, and the job of the decision procedure is to
+check whether \f$\Gamma\f$ is satisfiable or not; in other words,
+we are solving the problem \f$\Gamma\models\bot\f$.
+
+When the decision procedure receives a new fact \f$\phi\f$, it may
+either save this fact in its internal database for later processing,
+or may immediately process it, and possibly derive new facts
+\f$\{\psi_1,\ldots,\psi_k\}\f$ from \f$\phi\f$ and submit them back to
+the core (<tt>enqueueFact()</tt>).
+
+In the case when the set of derived facts is equisatisfiable with the
+original fact \f$\phi\f$, the decision procedure does not need to keep
+\f$\phi\f$ in its database; the completeness will still be preserved.
+
+For instance, if the DP receives <tt>r1=r2</tt>, where <tt>r1</tt> and
+<tt>r2</tt> are records with fields <tt>f1</tt> and <tt>f2</tt>, then
+the two facts <tt>r1.f1=r2.f1</tt> and <tt>r1.f2=r2.f2</tt>
+(equalities of the individual fields) together are logically
+equivalent to the original fact <tt>r1=r2</tt>, and therefore,
+enqueuing them is sufficient for preserving completeness.  The
+original fact need not be saved.
+
+\subsection theory_api_checkSat checkSat(bool fullEffort)
+
+The most important invariant (for completeness) is that when
+<tt>fullEffort</tt> is <tt>true</tt>, the DP must do all the work that
+it has postponed to find out if the current context is indeed
+satisfiable.  In particular, if satisfiability can be achieved by
+making some of the shared terms equal, it must be done at this time
+(see \ref theory_api_addSharedTerm for more info on shared terms).
+
+This call is your last warning: if you do not act now, the whole
+system will stop and notify the user.  However, the worst that can
+happen is that CVC3 becomes incomplete (it may report
+<tt>InValid</tt> when the query is actually valid).  It still remains
+sound, however.  That is, the <tt>Valid</tt> answer will still be
+correct.
+
+When <tt>fullEffort</tt> is <tt>false</tt>, the DP may choose to do as
+much or as little work as it wants.
+
+\subsection theory_api_setup setup()
+
+Add the given expression <tt>e</tt> to the notify list of all the
+expressions <tt>t<sub>1</sub>...t<sub>n</sub></tt> whose change would
+affect the value of <tt>e</tt>.  Normally, such expressions are the
+immediate children of <tt>e</tt>.
+
+Whenever the canonical representative of any <tt>t<sub>i</sub></tt>
+changes in the union-find database, a corresponding call to
+<tt>update()</tt> will be made, and the DP will have a chance to
+re-process the expression <tt>e</tt> to keep it up-to-date.
+
+\subsection theory_api_update update()
+
+The property of this call is similar to <tt>assertFact()</tt>: the new
+fact becomes part of the logical context.  However, the facts it
+receives do not necessarily belong to your theory, and are only
+reported because you asked the core to do so in <tt>setup()</tt>.
+
+Also, the new equalities that <tt>update()</tt> derives must be
+submitted through <tt>enqueueEquality()</tt> call.  This also means
+that the right-hand side of the submitted equalities must be fully
+simplified.  See <tt>\ref theory_api_enqueueEquality</tt> for more
+information.
+
+\subsection theory_api_addSharedTerm addSharedTerm()
+
+A term is called <em>shared</em> if it belongs to theory X, and appears
+as an i-leaf in a term from theory Y (that is, it's a Y-leaf).  In
+this case, the term is shared by theories X and Y.  For example, in
+<tt>2*arr[idx]-3</tt> the subterm <tt>arr[idx]</tt> belongs to the
+theory of arrays, but the entire term is an arithmetic expression;
+hence, <tt>arr[idx]</tt> is a shared term.
+
+When such a term appears in the system, the core notifies both
+theories about the term.
+
+Completeness of the CVC3 framework relies on the invariant that
+decision procedures propagate all the equalities between shared terms
+that can be derived in the current logical context.
+
+Often, the algorithms in DPs are designed to propagate all the
+equalities automatically (over all terms, including shared).  In this
+case, <tt>addSharedTerm()</tt> need not be re-implemented.
+
+In some cases, however, the DP has to take extra effort to satisfy the
+above invariant, and it is more efficient to restrict this extra
+effort only to the set of shared terms.  In this case,
+<tt>addSharedTerm()</tt> needs to collect the set of shared terms in a
+database 
+(which, of course, has to be \ref theory_api_backtrack "backtrackable"),
+and use it in the <tt>checkSat()</tt> call.
+
+\subsection theory_api_rewrite rewrite(Expr e)
+
+This function must return a <em>rewrite Theorem</em> of the form
+<tt>e==e1</tt> (or <tt>e<=>e1</tt> if <tt>e</tt> is a formula), where
+<tt>e1</tt> is a logically equivalent term or formula.
+
+This function can assume that all the immediate children of <tt>e</tt>
+are already completely simplified and rewritten.  The same property
+must hold for the result of the rewrite.
+
+Another invariant that <tt>rewrite()</tt> has to preserve is that if
+the result of a rewrite is an equality (you return
+<tt>e<=>(e1==e2)</tt>), then in the resulting equality <tt>e1 >=
+e2</tt> w.r.t. <tt>operator>=(Expr, Expr)</tt>, the fixed total
+ordering on all expressions given by the expression manager.  This
+invariant is important for termination of the simplifier, since
+equalities in CVC3 are used as (directed) rewrite rules, replacing
+the left-hand side (<tt>e1</tt>) with the right-hand side
+(<tt>e2</tt>).
+
+The core will call the <tt>rewrite()</tt> function iteratively on the
+right-hand side of the result, until the expression does not change.
+However, if the rewriting algorithm can guarantee that in a particular
+case no further rewrites from this theory will change the expression,
+the result can be flagged as a <em>normal rewrite</em>.  In this case,
+the core will not call <tt>rewrite()</tt> again, resulting in better
+performance.  The property that the expression indeed does not change
+with further rewrites is checked in the "debug" build, and any
+violation triggers assertion failures with ``<em>Simplify Error
+1</em>'' and ``<em>Simplify Error 2</em>'' messages.
+
+It is important to understand that the iterative call to
+<tt>rewrite()</tt> only applies to the top-level node, and
+<em>not</em> to subexpressions.  That is, if <tt>rewrite()</tt>
+changes the subexpressions (and not only the top-level operator), then
+it may violate another invariant that all the children of the result
+are completely rewritten and simplified.  If this invariant cannot be
+guaranteed, then <tt>rewrite()</tt> needs to call
+<tt>simplifyThm()</tt> method explicitly.
+
+Here is an example of a rewrite function:
+
+\verbatim
+Theorem TheoryFoo::rewrite(const Expr& e) {
+  Theorem res;
+  if(isBar(e)) {
+    res = reflexivityRule(e); 
+    res.getRHS().setRewriteNormal();  // No more rewrites needed
+  } else {
+    // May need to rewrite several times
+    res = < do real work >
+  }
+  return res;
+}
+\endverbatim
+
+\subsection theory_api_solve solve(Theorem e)
+
+This method takes an equality <tt>e</tt> (as a <tt>Theorem</tt>
+object) and turns it into a logically equivalent <em>solved form</em>:
+a conjunction of fully simplified equalities, possibly existentially
+quantified.  The terms on the left-hand sides cannot appear on any of
+the right-hand side terms, and every free variable in the solved form
+is also a free variable of <tt>e</tt>.  (New variables in the solved
+form must be existentially quantified).
+
+According to Clark Barrett's Ph.D. thesis, only one theory is allowed
+to have a solver.  In CVC3, such theory is the theory of
+arithmetic.  The restriction to a single solver in CVC3 is
+somewhat relaxed, and several theories can have their own solvers,
+provided that the solved form that such a secondary solver generates
+is also a solved form w.r.t. the theory of arithmetic.  This is the
+only asymmetric and non-local invariant in the core of Theory API.
+
+
+
+\subsection theory_api_computeType computeType()
+
+The basic CVC3 type checking mechanism is a simple recursive
+descent into the term structure, and it is implemented as a
+<tt>getType()</tt> method in the base <tt>Theory</tt> class.
+
+When computing a type of an expression <tt>e</tt>, this method
+determines which DP owns the expression, and calls the appropriate
+<tt>computeType()</tt> method, which is expected to check the
+expression for type consistency, and return the exact type of the
+expression.  The return type is then cached as an attribute on the
+expression <tt>e</tt> for a fast look-up in the subsequent calls to
+<tt>getType()</tt>.
+
+Each decision procedure must implement <tt>computeType()</tt> method
+for all of its operators.  For example, the theory of records has an
+operator for constructing record literals, for extracting a field of a
+record, and for updating a field of a record.  This means that
+<tt>computeType()</tt> needs to be able to compute the types for these
+three operators, and verify that all subexpressions are of expected
+types.
+
+Since subtypes in CVC3 are handled by TCCs, type consistency at
+this stage is only checked with respect to the <em>base types</em>,
+which is returned by <tt>getBaseType()</tt> method provided by the
+base <tt>Theory</tt> class.  For example, if a record expression
+<tt>e</tt> has a field <tt>foo</tt> of type <tt>INT</tt>, and the
+expression is a record update <tt>e WITH .foo := t</tt>, where
+<tt>t</tt> is of type <tt>REAL</tt>, then this expression is
+considered well-typed, since the base types of both <tt>INT</tt> and
+<tt>REAL</tt> is <tt>REAL</tt>.
+
+
+An important property of <tt>computeType()</tt> is that it must not
+only compute the exact type of the expression, but also verify that
+all subexpressions are type-correct, <em>relative to their base
+types</em>.  For instance, <tt>x = y</tt> has type <tt>BOOLEAN</tt>,
+and it is only type-correct if <tt>getBaseType(x) ==
+getBaseType(y)</tt>.  If this property is violated,
+<tt>TypecheckException</tt> must be thrown with the appropriate
+message.  Note, that the exact types of <tt>x</tt> and <tt>y</tt> may
+be different, and even disjoint.
+
+
+
+\subsection theory_api_computeTCC computeTCC()
+
+Type Correctness Condition (TCC) for an expression <em>e</em> (which
+can be either a term or a formula) is a formula <em>D<sub>e</sub></em>
+such that <em>D<sub>e</sub></em> is true if and only if <em>e</em> is
+defined (or <em>denoting</em>) in the current logical context.
+
+For example, an expression <tt>x/y</tt> is undefined when
+<tt>y=0</tt>, and is defined otherwise.  Therefore, \f$D_{x/y}\equiv
+y\ne 0\f$.
+
+\subsection theory_api_notifyInconsistent notifyInconsistent()
+
+
+
+\subsection theory_api_print print()
+
+The most important property of this method is that the printed
+expressions have to be parsable by the appropriate CVC3 parser.
+That is, CVC3 must be able to read what it prints.
+
+The recursive call to the global pretty-printer is implemented through
+the overloaded <tt>operator<<</tt> for <tt>ExprStream</tt>.  Read the
+documentation on <tt>ExprStream</tt> class before coding.
+
+Once coded, <strong>test your printer code!</strong> Print all the
+kinds of expressions from your theory, make the expressions large and
+complex, interspersed with terms from other theories, etc.  Make sure
+it both looks good, and CVC3 can read every term it prints.
+
+Here's an example of the <tt>print()</tt> method:
+
+\verbatim
+ExprStream&
+TheoryFoo::print(ExprStream& os, const Expr& e) {
+  switch(os.lang()) {
+  case PRESENTATION_LANG:
+    switch(e.getKind()) {
+    case ARROW:
+      os << "[" << push << e[0] << space << "-> " << e[1] << push << "]";
+      break;
+    case EQ:
+      os << "(" << push << e[0] << space << "= " << e[1] << push << ")";
+      break;
+    case NOT: os << "NOT " << e[0]; break;
+    .................
+    default:
+      // Print the top node in the default LISP format, continue with
+      // pretty-printing for children.
+      e.print(os);
+    }
+    break; // end of case PRESENTATION_LANGUAGE
+  case INTERNAL_LANG:
+    ..................
+    break; // end of case INTERNAL_LANG
+  default:
+    // Print the top node in the default LISP format, continue with
+    // pretty-printing for children.
+    e.print(os);
+  }
+  return os;
+}
+\endverbatim
+
+\subsection theory_api_parseExprOp parseExprOp()
+
+This method is not used yet, and is likely to change in the near
+future.
+
+\subsection theory_api_outputs Methods Provided by Theory API
+
+The Theory API consists not only of methods to re-implement in the
+subclass, but it also provides convenient methods in the base class
+which subclasses can readily use.  These methods subdivide into the
+following categories:
+
+<ul>
+<li>Methods for sending information to the core from a theory (a
+decision procedure),
+<li>\ref theory_api_core_proof_rules "Common proof rules",
+<li>Other convenient methods.
+</ul>
+
+\subsection theory_api_enqueueFact enqueueFact()
+
+Normally, a decision procedure should use this <em>and only this</em>
+method for reporting newly derived facts back to the core.  The only
+exception is a contradiction (a <tt>FALSE</tt> Theorem), which should
+be reported through <tt>setInconsistent()</tt> method for efficiency.
+
+Other exceptions include facts derived by the <tt>update()</tt>
+function, which may be reported through 
+<tt>\ref theory_api_enqueueEquality</tt>.
+
+\subsection theory_api_setInconsistent setInconsistent()
+
+Similar to <tt>\ref theory_api_enqueueFact</tt>, except that it
+requires the new Theorem to be <tt>FALSE</tt> (a contradiction).
+
+This method is used for more efficient processing of the derived
+contradiction, bypassing the fact queue.
+
+\subsection theory_api_simplifyThm simplifyThm() and simplify()
+
+In rare cases, a decision procedure may want to simplify a given
+expression w.r.t. the current context, and this is the function to
+call.  
+
+<strong>Be careful!</strong> This method may call your own
+<tt>\ref theory_api_rewrite</tt> method recursively.  
+
+It is also a relatively expensive function to call, so avoid it if
+possible.
+
+\subsection theory_api_enqueueEquality enqueueEquality()
+
+This function can be used in <tt>\ref theory_api_update</tt> to
+propagate the equalities induced by the given equality <tt>e1==e2</tt>
+as the argument to <tt>update()</tt>.
+
+In CVC3, equalities are treated as <em>directional</em>, meaning
+that left-hand side is always being replaced by the right-hand side.
+This means that if in the expression <tt>d</tt> there is a
+subexpression <tt>e1</tt>, then it must be replaced by <tt>e2</tt>.
+It also means that the resulting expression <tt>d2</tt> must be
+reported to be equal to the original one as <tt>d==d2</tt>, and
+<em>not</em> the other way around.
+
+Since the core may occasionally swap equalities submitted through
+<tt>\ref theory_api_enqueueFact</tt> (for termination reasons), it is
+important to submit the above equality by-passing the swapping engine.
+This is where <tt>enqueueEquality()</tt> is useful.
+
+<strong>Invariant:</strong> <tt>enqueueEquality()</tt> expects the
+argument to be a Theorem of the form <tt>e1==e2</tt>, where
+<tt>e2</tt> is a <em>fully simplified expression</em> in the current
+context.  That is, <tt>e2 == simplify(e2)</tt>.  You are responsible
+for maintaining this invariant in your decision procedure.
+
+\subsection theory_api_inconsistentThm inconsistentThm() and inconsistent()
+
+If the context is inconsistent, the <tt>inconsistent()</tt> method
+returns <tt>true</tt>, and <tt>inconsistentThm()</tt> returns the
+Theorem of <tt>FALSE</tt> (a proof of the contradiction).
+
+\subsection theory_api_isTerm isTerm()
+
+Tests whether the given expression is a term (as opposed to a formula).
+
+\subsection theory_api_isLiteral isLiteral()
+
+Tests whether the given formula is a literal (is an atomic formula or
+its negation).
+
+\subsection theory_api_isAtomic isAtomic()
+
+Tests whether the given term or formula is atomic.  In CVC3 it
+means that the expression does not contain formulas as subexpressions
+(for instance, as conditions in the <tt>IF-THEN-ELSE</tt> operator).
+
+This method is relatively expensive when called for the first time,
+but it caches the result in the Expr attributes, so the amortized
+complexity tends to be rather low.
+
+\subsection theory_api_updateHelper updateHelper()
+
+This method replaces all the immediate children of the given
+expression by their canonical representatives w.r.t. the union-find
+database, and returns the corresponding Theorem <tt>e==e1</tt>.
+
+This function is convenient to use inside <tt>\ref theory_api_update</tt>
+for rewriting <tt>d</tt>, the expression being updated.  However, it
+only works when the changed subexpression in <tt>d</tt> is its
+immediate child.
+
+\subsection theory_api_getType getType()
+
+\subsection theory_api_getTCC getTCC()
+
+\subsection theory_api_parseExpr parseExpr()
+
+
+\section theory_api_proofs Proof Rules: The Trusted Core
+
+Every proven formula (or <em>fact</em>) in CVC3 appears in the
+form of a <tt>Theorem</tt>.  Values of type <tt>Theorem</tt> have a
+special property: they cannot be constructed in any way but through
+the <em>proof rules</em>.  This is implemented by making all the
+constructors of this class private.  The only exception is the default
+constructor, which creates a null theorem, and it can only be used to
+create uninitialized variables of type <tt>Theorem</tt>, and assign
+them later.
+
+A proof rule is a function which takes <em>premises</em> (previously
+generated theorems) and other parameters, and generates a new theorem.
+The implementation of proof rules comprises the <em>trusted core</em>
+of CVC3, and the soundness of the tool relies entirely on the
+soundness of this core.  In other words, no matter what the bulk of
+the code does, if CVC3 derives the validity of a particular fact,
+it is guaranteed that that theorem is indeed valid, provided the
+trusted implementation is correct and sound.
+
+For this reason, it is prudent to keep the trusted core reasonably
+small, and more importantly, keep each proof rule clean and simple, so
+that the correctness of the rule itself (mathematically) and its
+implementation can be easily verified by manual inspection.
+
+For the same reason, <strong>every rule must be thoroughly
+documented</strong>.  It's a very good idea to include a LaTeX formula
+for the proof rule that a function implements.  Keep in mind that
+reverse-engineering the mathematical meaning of a proof rule is a
+daunting task, especially if the code is rather long and complex.
+
+Check out <tt>src/include/common_proof_rules.h</tt> for examples.
+
+\subsection theory_api_proof_classes Hierarchy of Classes
+
+Like anything else in CVC3, there is an API for implementing proof
+rules defined by the class <tt>TheoremProducer</tt>.  This class
+provides two protected methods, <tt>newTheorem()</tt> and
+<tt>newRWTheorem()</tt>, to its subclasses, which can create arbitrary
+<tt>Theorem</tt> values.  Therefore, a part of the code is considered
+<em>trusted</em> whenever the file contains <tt>\#include
+"theorem_producer.h"</tt> statement in it.  To enforce this,
+<tt>theorem_producer.h</tt> requires a macro symbol
+<tt>_CVC3_TRUSTED_</tt> to be defined (otherwise, a compiler warning
+is generated).
+
+<strong>Important:</strong> the <tt>_CVC3_TRUSTED_</tt> symbol must be
+defined only in *.cpp files, and <strong>never</strong> in *.h, to
+prevent accidental inclusion of <tt>theorem_producer.h</tt>, and thus,
+inadvertently making large portions of code trusted.
+
+Exporting the proof rules to the untrusted code (class
+<tt>TheoryFoo</tt>) is implemented through the custom API in
+<tt>foo_proof_rules.h</tt> (abstract class <tt>FooProofRules</tt>),
+whose pure methods are the proof rules.  This header file does not
+include <tt>theorem_producer.h</tt>, and therefore, is suitable for
+inclusion by untrusted code.
+
+The implementation of <tt>FooProofRules</tt> consists of the
+implementation API: <tt>foo_theorem_producer.h</tt> (class
+<tt>FooTheoremProducer</tt>, inherits from <tt>FooProofRules</tt> and
+<tt>TheoremProducer</tt>), and the implementation proper in
+<tt>foo_theorem_producer.cpp</tt>.
+
+Normally, <tt>theorem_producer.h</tt> is included from
+<tt>foo_theorem_producer.h</tt> (to declare
+<tt>FooTheoremProducer</tt> as a subclass of
+<tt>TheoremProducer</tt>), and <tt>foo_theorem_producer.h</tt> is
+included from <tt>foo_theorem_producer.cpp</tt>:
+
+\verbatim
+// File foo_proof_rules.h
+class FooProofRules {
+....
+};
+\endverbatim
+
+\verbatim
+// File foo_theorem_producer.h
+#include "theorem_producer.h"
+
+class FooTheoremProducer: public FooProofRules, public TheoremProducer {
+....
+};
+\endverbatim
+
+\verbatim
+// File foo_theorem_producer.cpp
+#define _CVC3_TRUSTED_
+#include "foo_theorem_producer.h"
+....
+\endverbatim
+
+In order for the theory code to use the proof rules, a pointer to
+<tt>FooProofRules</tt> is declared in the <tt>TheoryFoo</tt> class:
+
+\verbatim
+// File theory_foo.h
+
+class FooProofRules;
+class TheoryFoo: public Theory {
+......
+  FooProofRules* d_rules;
+  //! Create an instance of FooProofRules class
+  FooProofRules* createProofRules(VCL* vcl);
+.....
+};
+\endverbatim
+
+Since instantiating <tt>FooProofRules</tt> requires creating a new
+object of class <tt>FooTheoremProducer</tt>, which belongs to trusted
+part of the code, the implementation of <tt>createProofRules()</tt>
+method needs to be in <tt>foo_theorem_producer.cpp</tt>, rather than
+in <tt>theory_foo.cpp</tt>.  This is the only exception to the rule
+that everything declared in a <tt>X.h</tt> file must be implemented in
+the corresponding <tt>X.cpp</tt> file in CVC3.
+
+\verbatim
+// File foo_theorem_producer.cpp
+......
+FooProofRules* TheoryFoo::createProofRules(VCL* vcl) {
+  return new FooTheoremProducer(vcl);
+}
+.....
+\endverbatim
+
+In the <tt>TheoryFoo()</tt> constructor, the class variable
+<tt>d_rules</tt> is initialized by calling <tt>createProofRules()</tt>:
+
+\verbatim
+// File theory_foo.cpp
+.....
+TheoryFoo::TheoryFoo(VCL* vcl): Theory(vcl, "Foo") {
+.....
+  d_rules = createProofRules(vcl);
+.....
+}
+
+// Destructor: destroy the proof rules class
+TheoryFoo::~TheoryFoo() { delete d_rules; }
+.....
+\endverbatim
+
+\subsection theory_api_proof_rule Implementing a Proof Rule 
+
+Each function implementing a proof rule has several components:
+
+<ul>
+<li>Soundness check(s),
+<li>The actual computation of the result,
+<li>Building assumptions,
+<li>Building a proof,
+<li>Constructing a new <tt>Theorem</tt> object.
+</ul>
+
+There is a special macro <tt>CHECK_SOUND(cond, message)</tt> for
+checking the soundness conditions.  If the condition <tt>cond</tt>
+does not evaluate to <tt>true</tt>, then a <tt>SoundException</tt> is
+thrown with the <tt>message</tt> string.
+
+For efficiency, the user may decide to skip the soundness checks.  In
+order to honor this decision, all soundness checks must be supressed
+when the <tt>CHECK_PROOFS</tt> macro evaluates to <tt>false</tt>:
+
+\verbatim
+if(CHECK_PROOFS) {
+  CHECK_SOUND(denominator != 0,
+              "TheoryArith: Division rule: denominator == 0");
+}
+\endverbatim
+
+Soundness checks play <strong>the most important role</strong> in
+making CVC3 sound.  Your implementation must guarantee that if all
+soundness checks pass, then the rule is indeed sound to apply, and the
+theorem you generate at the end is indeed a theorem.  Soundness checks
+include verifying that the premises (Theorems given as arguments) are
+of the expected format, and all the additional parameters satisfy all
+the side conditions of the proof rule.
+
+Soundness checks <strong>must be complete and self-sufficient</strong>
+(bullet-proof) within the rule; that is, no matter how the rule is
+called and with which arguments, there should be no way for the rule
+to generate an invalid theorem.  Even if the untrusted code which
+calls the rule does all the necessary checks, you have to do them
+again inside the rule.  This is the whole point of the code being
+trusted: <em>it cannot go wrong, no matter what happens outside</em>.
+In case of CVC3, this means that <em>any non-null</em>
+<tt>Theorem</tt> <em>object represents a valid theorem</em>, no matter
+how this theorem was generated.
+
+The main component of a <tt>Theorem</tt> object is a formula (returned
+by <tt>Theorem::getExpr()</tt>), which is valid in the appropriate
+<em>logical context</em>.  The logical context is defined by the set
+of <em>assumptions</em> carried along in the <tt>Theorem</tt> object.
+Mathematically, a theorem object represents a <em>sequent</em>
+\f$\Gamma\vdash\phi\f$, where \f$\Gamma\f$ is the set of assumptions
+(formulas assumed to be true), and \f$\phi\f$ is the theorem itself,
+the formula which logically follows from \f$\Gamma\f$.
+
+Typically, an inference rule has the following format: 
+\f[\frac{\Gamma_1\vdash\phi_1\quad\cdots\quad\Gamma_n\vdash\phi_n}
+        {\Gamma_1,\ldots,\Gamma_n\vdash\psi}\f]
+where the assumptions of the conclusion are the union of all the
+assumptions from the premises.
+
+The easiest way to compute the set of assumptions for the conclusion
+is to use the overloaded method <tt>merge()</tt> provided by the
+<tt>theorem.h</tt> API.  This way you do not have to bother about the
+internal representation of assumptions.  Keep in mind, that CVC3
+may be running in the mode without assumptions (for efficiency), which
+can be queried by <tt>withAssumptions()</tt> method:
+
+\verbatim
+Theorem fooRule(const Theorem& prem1, const Theorem& prem2) {
+.....
+Assumptions a;
+if(withAssumptions())
+  a = merge(prem1, prem2);
+....
+}
+\endverbatim
+
+If the rule accepts more than two premises, you can merge assumptions
+by passing the vector of all premises to the <tt>merge()</tt> method.
+
+When there is only one premis, the simplest way is to make a clean
+copy of the assumptions from the premis:
+
+\verbatim
+if(withAssumptions())
+  a = premis.getAssumptionsCopy();
+\endverbatim
+
+Occasionally, one needs to remove assumptions from the set, as in the
+following rule:
+\f[\frac{\Gamma_1\vdash\alpha\quad \Gamma_2, \alpha\vdash\phi}
+        {\Gamma_1, \Gamma_2\vdash\phi}\mbox{Cut}\f]
+
+In this case, you can use the overloaded <tt>operator-()</tt> for
+class <tt>Assumptions</tt>:
+
+\verbatim
+Theorem cutRule(const Theorem& alpha, const Theorem& phi) {
+.....
+Assumptions a;
+if(withAssumptions())
+  a = (phi.getAssumptions() - alpha.getExpr()) + alpha.getAssumptions();
+....
+}
+\endverbatim
+
+Remember, however, that due to the internal representation used in CVC3,
+removing an assumption is quite expensive, while merging is very
+cheap.
+
+Also, if the soundness of your rule relies on the presence (or
+absence) of certain assumptions in premises, the first thing you need
+to check for is that <tt>withAssumptions()</tt> returns <tt>true</tt>
+(otherwise there is no way to determine the soundness of the rule, so
+it should not be called in the mode without assumptions).
+
+In the above rule, if the assumption \f$\alpha\f$ were required to be
+present for soundness of the rule, one could check it as follows:
+
+\verbatim
+const Expr& alphaExpr = alpha.getExpr();
+const Assumptions& phiAssump = phi.getAssumptionsRef();
+if(CHECK_PROOFS) {
+  CHECK_SOUND(withAssumptions(),
+              "TheoryFoo::cutRule: called without assumptions!");
+  CHECK_SOUND(!phiAssump[alphaExpr].isNull(),
+              "TheoryFoo::cutRule: alpha is not an assumption of phi");
+}
+\endverbatim
+
+It is <strong>extremely important</strong> that assumptions are
+computed correctly when <tt>withAssumptions()</tt> returns
+<tt>true</tt>, since assumptions are used by the SAT solver in the
+core framework, and are absolutely crucial for the results to be
+correct (or <em>sound</em>).  Remember, that assumptions represent the
+logical context where the theorem is true, and if they are not
+computed properly, the entire theorem may become invalid.
+
+Each <tt>Theorem</tt> object carries a <em>proof</em> of itself in the
+form of a <tt>Proof</tt> object.
+
+Proofs are relatively expensive to generate (they take up extra space
+and somewhat slow down the rule execution), and therefore, it is the
+user's privilege to turn them off.  For this reason, all proof
+generation code must be guarded by the method <tt>withProof()</tt>,
+similarly to <tt>withAssumptions()</tt>.
+
+CVC3 uses a version of Natural Deduction as its logical basis, and
+exploits the idea of Curry-Howard isomorphism to represent proofs as
+terms over function symbols representing proof rules.  A
+``<em>type</em>'' of a proof term is the formula (theorem) derived by
+the corresponding proof.  The correctness of a proof in this framework
+corresponds to the proof term being ``well-typed.''  
+
+The <tt>TheoremProducer</tt> API provides an overloaded method
+<tt>newPf()</tt> for building proof terms.  The first argument of
+(almost) any <tt>newPf()</tt> version is the name of the proof rule
+(<tt>string</tt>), and the rest are the arguments (parameters as
+<tt>Expr</tt> values, and the proofs of the rule's premises).
+
+The key idea in building a proof term for the rule is to provide
+enough information in the proof term to be able to re-run the rule
+again with exactly the same arguments.
+
+For instance, a proof term for the following rule:
+\f[\frac{\Gamma_1\vdash x < y \quad \Gamma_2\vdash y < z}
+        {\Gamma_1, \Gamma_2\vdash x < z}\mbox{project}
+\f]
+can be constructed as follows:
+
+\verbatim
+Theorem projectRule(const Theorem& xLTy, const Theorem& yLTz) {
+.....
+Proof pf;
+if(withProof()) {
+  vector<Expr> exprs;
+  vector<Proof> pfs;
+  exprs.push_back(xLTy.getExpr());  exprs.push_back(yLTz.getExpr());
+  pfs.push_back(xLTy.getProof());  pfs.push_back(yLTz.getProof());
+  pf = newPf("project", exprs, pfs);
+}
+.....
+}
+\endverbatim
+
+It is a very good idea to describe the proof object arguments in the
+proof rule documentation (doxygen comments) in
+<tt>foo_proof_rules.h</tt> file.
+
+Note, that the proof object does <em>not</em> carry around any
+information about the assumptions.  This is because all the
+assumptions are present implicitly as ``types'' of bound proof
+variables in LAMBDA-terms.  I skip the description of this issue in
+the current version of this document, as it is rather subtle, and
+there is a 99\% chance that you do not need to know that for your DP.
+
+Finally, creating the resulting theorem in the proof rule is usually
+done by calling <tt>newTheorem(conclusionExpr, a, pf)</tt>, where
+<tt>a</tt> is the <tt>Assumptions</tt> variable, and <tt>pf</tt> is
+the proof term.
+
+There is a special class of proof rules called <em>rewrite rules</em>
+in CVC3.  These are proof rules without premises (<em>axioms</em>)
+whose conclusion is of the form <tt>expr1 = expr2</tt> or <tt>frm1
+<=> frm2</tt>.  These rules are so ubiquitous in the system that there
+is a special optimized constructor for the corresponding theorems:
+<tt>newRWTheorem(expr1, expr2, a, pf)</tt>.
+
+<strong>Note:</strong> the <tt>Theorem</tt> object constructed by the
+rewrite rule has a different internal representation from the "normal"
+<tt>Theorem</tt> object.  Therefore, constructing a rewrite theorem
+with <tt>newTheorem(expr1.eqExpr(expr2), a, pf)</tt> will result in a
+run-time error.  Make sure that if your theorem is a rewrite theorem
+(an equality <tt>=</tt> or equivalence <tt><=></tt>), then it must be
+constructed using the <tt>newRWTheorem()</tt> method.
+
+I did not mention anything about computing the expression for the
+conclusion of the rule, but it should be fairly obvious how to do
+this.  Remember, that each proof rule should be coded as concisely and
+as cleanly as possible, to ensure the effectiveness of manual
+inspection.  Remember, this is a trusted part of the code.
+<strong>K</strong>eep <strong>I</strong>t <strong>S</strong>imple,
+<strong>S</strong>tupid. :-)
+
+<em>Sergey Berezin / berezin AT stanford DOT edu</em>
+
+*/

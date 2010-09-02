@@ -1,0 +1,16 @@
+/*!\page README README
+
+
+This is a distribution of the CVC3 source code.  Its use is governed by the
+terms set forth in the accompanying file \ref LICENSE.
+
+For instructions on compiling and installing the code, see \ref INSTALL.
+
+Other information and related links can be found at the CVC3 home
+page:
+
+<pre>
+   http://www.cs.nyu.edu/acsys/cvc3
+</pre>
+
+*/

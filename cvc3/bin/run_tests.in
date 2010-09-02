@@ -1,0 +1,552 @@
+#!@PERL@ -w
+
+# Run regression tests of a given level (default: 0, meaning
+# minimum amount of tests).  The higher the regression level, the more
+# tests to run, and the harder they get.
+
+# Each test may contain information about its regression level,
+# expected outcome, expected runtime, whether it produces a proof,
+# etc. in the format given below.  This script will scan the first 100
+# lines of each test and try to collect this information.
+
+# If some info is not found, defaults are assumed.  Default regression
+# level is 0, expected runtime is unbounded, outcome is undefined
+# (whatever it returns is OK), proof should be produced if outcome is
+# Valid, and if it is produced, it'll be verified.
+
+# Test info is given in the comments; here are examples
+# 
+# %%% Regression level = 2
+# %%% Result = Valid  %% or Invalid, or Unknown
+# %%% Runtime = 10   %% in seconds
+# %%% Proof = yes    %% or 'no', if it doesn't produce a proof
+# %%% Language = presentation %% or 'internal'
+
+# The number of '%' and following spaces can vary, case is not
+# important.  Any text after the value is ignored.  Any comments that
+# are not recognized are also ignored.
+
+use strict;
+
+my %optionsHelp =
+    ("-h" => "Print this help and exit",
+     "-v" => "Be verbose (default, opposite of -q)",
+     "-q" => "Quiet mode (opposite of -v)",
+     "-l n" => "Set regression level (default 0, the easiest level)",
+     "+rt" => "Check that each test finishes within the specified runtime",
+     "-rt" => "Do not check whether test finishes within the specified runtime (default)",
+#      "+proofs" => "Produce and verify proofs",
+#      "-proofs" => "Do not produce / verify proofs (default)",
+     "-lang name" => "Use the named input language only (default=all)",
+     "-t secs" => "Run each executable for at most 'secs' seconds [0 = no limit]",
+     "-vc prog" => "Use \"prog\" to run tests (default=cvc3)",
+     "-pfc prog" => "Use \"prog\" to run a proof checker (default=true)"
+     );
+
+my $usageString =
+    "run_tests [ options ] [ test1 test2 ... ] [ -- [ command line options ] ]
+
+Run regression tests.  Concrete test files or directories
+with test files should be specified by name with a full path or
+relative path to the current directory.  If none specified, all
+subdirectories are searched for test files.
+
+Default running mode is overriden by test specs;
+test specs are overriden by command line options.
+
+Options:
+  " . join("\n  ",
+	   map { sprintf("%-9s %s", $_, $optionsHelp{$_}) } keys(%optionsHelp));
+
+
+# Database of default values for options
+my %optionsDefault = ("level" => 0,
+		      "verbose" => 1,
+                      "rt" => 0,
+		      "proofs" => 0,
+		      "lang" => "all",
+		      "runpath" => "@TOP@/bin/",
+		      "vc" => "cvc3", # Program names
+		      "pfc" => "true",
+		      "testpath" => "@TOP@/testcases",
+		      "tempdir" => "/tmp",
+		      # max. number of lines to read from the testcase file
+		      # when looking for info comments
+		      "maxInfoLines" => 100,
+		      # Runtime limit; 0 = no limit
+		      "time" => 0,
+		      # Additional command line options
+		      "clOptions" => "");
+
+# Database of command line options.  Initially, they are undefined
+my %options = ();
+# The list of testcases to run
+my @testcases = ();
+# Temporary array for options
+my @clOptions = ();
+# State is either "own" or "prog", meaning that we're reading either
+# our own or prog's options.
+my $argState = "own";
+for(my $i=0; $i <= $#ARGV; $i++) {
+    if($argState eq "own") {
+	if($ARGV[$i] eq "--") { $argState = "prog"; }
+	elsif($ARGV[$i] eq "-h") { print($usageString, "\n"); exit 0; }
+	elsif($ARGV[$i] eq "+rt") { $options{'rt'} = 1; }
+	elsif($ARGV[$i] eq "-rt") { $options{'rt'} = 0; }
+	elsif($ARGV[$i] eq "+proofs") { $options{'proofs'} = 1; }
+	elsif($ARGV[$i] eq "-proofs") { $options{'proofs'} = 0; }
+	elsif($ARGV[$i] eq "-v") { $options{'verbose'} = 1; }
+	elsif($ARGV[$i] eq "-q") { $options{'verbose'} = 0; }
+	elsif($ARGV[$i] eq "-lang") {
+	    if(++$i>$#ARGV) {
+		print STDERR "Option -lang requires an argument.\n";
+		print STDERR "Run run_tests -h for help\n";
+		exit 1;
+	    }
+	    $options{'lang'} = $ARGV[$i];
+	} elsif($ARGV[$i] eq "-l") {
+	    if(++$i>$#ARGV) {
+		print STDERR "Option -l requires an argument.\n";
+		print STDERR "Run run_tests -h for help\n";
+		exit 1;
+	    }
+	    $options{'level'} = $ARGV[$i];
+	} elsif($ARGV[$i] eq "-t") {
+	    if(++$i>$#ARGV) {
+		print STDERR "Option -t requires an argument.\n";
+		print STDERR "Run run_tests -h for help\n";
+		exit 1;
+	    }
+	    $options{'time'} = $ARGV[$i];
+	} elsif($ARGV[$i] eq "-vc") {
+	    if(++$i>$#ARGV) {
+		print STDERR "Option -vc requires an argument.\n";
+		print STDERR "Run run_tests -h for help\n";
+		exit 1;
+	    }
+	    $options{'vc'} = $ARGV[$i];
+	} elsif($ARGV[$i] eq "-pfc") {
+	    if(++$i>$#ARGV) {
+		print STDERR "Option -pfc requires an argument.\n";
+		print STDERR "Run run_tests -h for help\n";
+		exit 1;
+	    }
+	    $options{'pfc'} = $ARGV[$i];
+	} else {
+	    # This must be a testcase name
+	    push @testcases, $ARGV[$i];
+	}
+    } elsif($argState eq "prog") {
+	push @clOptions, $ARGV[$i];
+    } else {
+	die "BUG: Bad argState: $argState";
+    }
+}
+
+if($#clOptions >= 0) {
+    $options{'clOptions'} = join(" ", map { "\"" . $_ . "\"" } @clOptions);
+}
+
+# Compute the value of the option: first check the command line
+# option, then the supplied database (by ref. as the second arg), then
+# default values database.  If it cannot find definition, it is a bug,
+# and the script is stopped.
+
+sub getOpt {
+    my ($name, $dbRef) = @_;
+    
+    return $options{$name} if(defined($options{$name}));
+    return $dbRef->{$name} if(defined($dbRef) && defined($dbRef->{$name}));
+    return $optionsDefault{$name} if(defined($optionsDefault{$name}));
+    
+    # Option value is not found
+    die "getOpt($name): option is undefined";
+}
+
+my $verbose = getOpt('verbose');
+
+# Set the path
+my $systemPath = ".";
+if(defined($ENV{'PATH'})) {
+    $systemPath = $ENV{'PATH'};
+}
+$ENV{'PATH'} = getOpt('runpath') . ":" . $systemPath;
+
+if($verbose) {
+    print "*********\n";
+    print("Regression level: ", getOpt('level'), "\n");
+    print("Language: ", getOpt('lang'), "\n");
+    print("Whether to produce / check proofs: ",
+	  (defined($options{'proofs'}))?
+	  (($options{'proofs'})? "yes" : "no") : "depends on testcase",
+	  "\n");
+    if(getOpt('time') > 0) {
+	print("Time limit per test: ", getOpt('time'), " sec\n");
+    }
+    print("PATH = ", $ENV{'PATH'}, "\n");
+    print "*********\n";
+}
+
+my $tmpdir = getOpt('tempdir') . "/run_tests_tmp-$$";
+my $currdir = `pwd`;
+my $prog = getOpt('vc');
+my $pfc = getOpt('pfc');
+my $level = getOpt('level');
+my $lang = getOpt('lang');
+my $rt = getOpt('rt');
+
+# Read the first 'maxInfoLines' of the testcase and fetch information
+# from the comments
+
+sub getTestOpt {
+    my ($name) = @_;
+    # This is what we return
+    my %db = ();
+
+    open IN, $name or die "Cannot open $name: $?";
+    for(my $lines = getOpt('maxInfoLines'), my $str = <IN>;
+	defined($str) && $lines > 0;
+	$lines--, $str = <IN>)
+    {
+	if($str =~ /^(;|\s|%|\#)*Regression level\s*=\s*(\d+)/i) {
+	    $db{'level'} = $2;
+	}
+	if($str =~ /^(;|\s|%|\#)*Result\s*=\s*(Valid|Invalid|Satisfiable|Unsatisfiable|Unknown)/i) {
+	    $db{'result'} = lc $2;
+	}
+	if($str =~ /^( |\t)*:status\s*(unsat|sat|unknown)/i) {
+	    $db{'result'} = lc $2;
+	}
+	if($str =~ /^(;|\s|%|\#)*Runtime\s*=\s*(\d+)/i) {
+	    $db{'runtime'} = $2;
+	}
+	if($str =~ /^(;|\s|%|\#)*Proof\s*=\s*(yes|no)/i) {
+	    if($2 eq "yes") { $db{'proofs'} = 1; }
+	    else { $db{'proofs'} = 0; }
+	}
+	if($str =~ /^(;|\s|%|\#)*SAT mode\s*=\s*(on|off)/i) {
+	    if($2 eq "on") { $db{'sat'} = 1; }
+	    else { $db{'sat'} = 0; }
+	}
+	if($str =~ /^(;|\s|%|\#)*Language\s*=\s*(.*)$/i) {
+	    $db{'lang'} = lc $2;
+	}
+	if($str =~ /^(;|\s|%|\#)*Program Options\s*=\s*(.*)$/i) {
+	    $db{'clOptions'} = $2;
+	}
+    }
+    close IN;
+
+    # If regression level is not set, make it 3. So, if a lower level
+    # is requested, only explicitly marked tests will be run.
+    if(!defined($db{'level'})) { $db{'level'}=3; }
+    # If the input language is not defined, guess it by extension
+    if(!defined($db{'lang'})) {
+	if($name =~ /\.(cvc|svc)$/) {
+	    $db{'lang'} = "presentation";
+	} elsif($name =~ /\.(li?sp)$/) {
+	    $db{'lang'} = "internal";
+	} elsif($name =~ /\.(smt)$/) {
+	    $db{'lang'} = "smtlib";
+	}
+    }
+
+    return %db;
+}
+
+# Total number of tests run
+my $testsTotal=0;
+# Total number of proofs checked by pfc
+my $proofsChecked=0;
+# Total number of tests with problems (each test is counted at most once)
+my $testsProblems=0;
+### Database of results
+# It is a hash mapping problem keys to arrays of testcase names.
+# Only problematic testcase are inserted here.
+# Keys are: fail, result, proof, noproof (no proof generated when should),
+# time, timeTooMuch, lang (wrong language),
+# error (program reported errors, but didn't die)
+my %testsDB=();
+
+# Search for a string element in the array ref, and return 1 if found, 0 if not
+sub findStringElement {
+    my ($el, $aRef) = @_;
+    foreach my $v (@{$aRef}) {
+	if($v eq $el) { return 1; }
+    }
+    return 0;
+}
+
+# Add a testcase to the set of problematic runs.
+# Args: 
+#   test is the full or relative path to the test file
+#   lang is the input language (not used currently)
+#   problem is the name of the problem the testcase exhibits
+sub addProblem {
+    my ($test, $lang, $problem) = @_;
+    my $aRef = $testsDB{$problem};
+    if(!defined($aRef)) { $aRef=[ ]; }
+    if(!findStringElement($test, $aRef)) {
+	$testsDB{$problem} = [@{$aRef}, $test];
+    }
+}
+
+# Total running time
+my $totalTime = time;
+my $totalRunningTime = 0;
+my $defaultDir = `pwd`;
+$defaultDir =~ s/\n//;
+
+foreach my $testcase (@testcases) {
+    chdir $defaultDir or die "Cannot chdir to $defaultDir: $?";
+    my @testcasesTmp = ();
+    if(-f $testcase) { push @testcasesTmp, $testcase; }
+    elsif(-d $testcase) {
+	# Compute the list of files for testcases
+	opendir(TESTS, $testcase)
+	    or die "Cannot open directory $testcase: $?";
+	@testcasesTmp = grep {
+	    /[.]([sc]vcl?|li?sp|smt)$/ && -f "$testcase/$_" } readdir(TESTS);
+	closedir TESTS;
+	@testcasesTmp = map { "$testcase/$_" } @testcasesTmp;
+    } else {
+	print("*** WARNING: cannot find testcase $testcase: ",
+	      "no such file or directory\n");
+    }
+
+    for(my $i=0; $i<=$#testcasesTmp; $i++) {
+	my $name = $testcasesTmp[$i];
+	my $file = "$defaultDir/$name";
+	my $hasProblem=0;
+	if(!(-f $file)) {
+	    print "WARNING: no such file: $file\n";
+	    next;
+	}
+	my %opt = getTestOpt($file);
+	# Check regression level
+	if(defined($opt{'level'}) && $level < $opt{'level'}) {
+	    # Regression level of this test is too high; skip it
+	    next;
+	}
+	# Print the testcase name
+	print("===============================================\n",
+	      $testcasesTmp[$i], ":\n");
+	# Check the input language
+	if (!defined($opt{'lang'})) {
+	    print "Unknown language, skipping $testcasesTmp[$i]\n";
+	    $hasProblem=1;
+	    addProblem($name, $lang, 'lang');
+	    next;
+	}
+	if($lang ne "all" && $lang ne $opt{'lang'}) {
+	    print "Wrong input language, skipping $testcasesTmp[$i]\n";
+	    $hasProblem=1;
+	    addProblem($name, $lang, 'lang');
+	    next;
+	}
+	my $checkProofs = getOpt('proofs', \%opt);
+	my $expRuntime = $opt{'runtime'};
+	my $expResult = $opt{'result'};
+	my $clOptions = getOpt('clOptions', \%opt);
+	my $language = $opt{'lang'};
+	# Print some testcase specific info
+	if($verbose) {
+	    print("Language: $language\n");
+	    print("Checking proofs: ", ($checkProofs)? "yes" : "no",
+		  "\n");
+	    if($rt && defined($expRuntime)) {
+		print("Expected runtime: ", $expRuntime, " sec\n");
+	    }
+	    if(defined($expResult)) {
+		print("Expected result: ", $expResult, "\n");
+	    }
+	    if($clOptions =~ /\S/) {
+		print("Program options: ", $clOptions, "\n");
+	    }
+	}
+	# Create a temporary dir, but first delete it; there may be
+	# junk there
+	system("/bin/rm -rf $tmpdir");
+	mkdir $tmpdir or print "Cannot create directory $tmpdir\n";
+	chdir $tmpdir or die "Cannot chdir to $tmpdir: $?";
+
+	# Compute arguments
+	my @progArgs = ();
+	push @progArgs, ($checkProofs)? "+proofs" : "-proofs";
+	if($language ne "presentation") { push @progArgs, "-lang $language"; }
+	push @progArgs, $clOptions;
+	my $progArgs = join(" ",  @progArgs);
+	# Now, run the sucker
+	my $timeMax = getOpt('time');
+	my $timeLimit = ($timeMax > 0)? "-t $timeMax" : "";
+	my $limits = "ulimit -c 0 -d 1000000 -m 1000000 ".
+	    "-s 50000 -v 1000000 $timeLimit";
+	# Windows ulimit dies if you pass -m
+	$limits = "ulimit -c 0 -d 1000000 -s 50000 -v 1000000 $timeLimit" if `uname -o` eq 'Cygwin';
+	my $logging = ($verbose)? " 2>&1 | tee output" : "> output 2>&1";
+	my $timing = "'@TIME@' -f \"User+Sys Time: %U+%S\" ";
+	if($verbose) {
+	    print "***\n";
+	    print "Running '$prog' $progArgs < '$file'\n";
+	    print "***\n";
+	}
+	my $time = time;
+	my $exitVal = system("$limits; $timing '$prog' $progArgs "
+			     . "< '$file' $logging");
+	$time = time - $time;
+	# OK, let's see what happened
+	$testsTotal++;
+	# Printing runtime
+	print "Elapsed Runtime: $time sec\n";
+	# Parsing the output
+	open IN, "output" or die "Cannot open `pwd`/output: $?";
+	my $str;
+	my $result="";
+	while(defined($str=<IN>)) {
+	    # Find at least one valid result
+	    if($result ne "valid" && $str =~ /^(Valid|In[Vv]alid|Satisfiable|Unsatisfiable|Unknown|unsat|sat|unknown)/) {
+		$result=lc $1;
+	    }
+	    # Exit value may be masked by the shell pipe.  Fish it
+	    # out from the output
+	    if($str =~ /^(Interrupted|Segmentation|Bus error|.*exception|.*Fatal error|.*std::bad_alloc)/) {
+		$exitVal = $1;
+	    }
+	    if($str =~ /^User\+Sys Time: (\d+\.\d\d)\+(\d+\.\d\d)/) {
+		$time = $1+$2;
+		print "Program Runtime: $time";
+		$totalRunningTime = $totalRunningTime + $time;
+	    }
+	}
+	close IN;
+	if($rt && defined($expRuntime)) {
+	    if($time > $expRuntime) {
+		if($time > 10*$expRuntime) {
+		    print " MUCH";
+		    addProblem($name, $lang, 'timeTooMuch');
+		}
+		print " LONGER than expected: $expRuntime sec";
+		$hasProblem=1;
+		addProblem($name, $lang, 'time');
+	    }
+	    elsif(($expRuntime >= 4 && $expRuntime <= 15 && $time <= $expRuntime-2) ||
+	          ($expRuntime > 15 && $time <= (17*$expRuntime)/20)) {
+		if($time <= $expRuntime/2) {
+		    print " MUCH";
+		    addProblem($name, $lang, 'timeTooFast');
+		}
+                print " FASTER than expected: $expRuntime sec";
+                addProblem($name, $lang, 'timeFast');
+                $hasProblem=1;
+            }
+	}
+	print "\n";
+	if($exitVal ne "0") {
+	    print "*** FAILED with exit code $exitVal\n";
+	    $hasProblem=1;
+	    addProblem($name, $lang, 'fail');
+	}
+	# Checking for errors
+#	if($hasErrors) {
+#	    $hasProblem=1;
+#	    addProblem($name, $lang, 'error');
+#	    print "ERRORS in the test\n";
+#	}
+	# Printing result diagnostics
+	if(defined($expResult)) {
+	    if($expResult ne $result) {
+		$hasProblem=1;
+		if($result eq "") {
+		    addProblem($name, $lang, 'fail');
+		    print("FAILED (no result, expected $expResult)\n");
+		} else {
+		    addProblem($name, $lang, 'result');
+		    print("WRONG RESULT (", $result,
+			  " instead of $expResult)\n");
+		}
+	    } else {
+		print "Result is correct\n";
+	    }
+	}
+	$testsProblems += $hasProblem;
+	print("=============== End of testcase ===============\n");
+    }
+}
+
+$totalTime = time - $totalTime;
+
+print "\nStatistics:\n";
+print "Total tests run: $testsTotal\n";
+print "Total running time: $totalRunningTime sec\n";
+print "Total elapsed time: $totalTime sec\n";
+print "Total number of proofs checked: $proofsChecked\n";
+print "Problematic cases: $testsProblems\n";
+if($testsProblems > 0 && $verbose) {
+    my $aref;
+    print "\nDetailed Statistics:\n";
+    $aref=$testsDB{'fail'};
+    if(defined($aref)) {
+	my @a = @{$aref};
+	printf("Failed tests [%d]:\n", $#a+1);
+	foreach my $n (@a) { print "  $n\n"; }
+    }
+#    $aref=$testsDB{'error'};
+#    if(defined($aref)) {
+#	my @a = @{$aref};
+#	printf("Tests with errors [%d]:\n", $#a+1);
+#	foreach my $n (@a) { print "  $n\n"; }
+#    }
+    $aref=$testsDB{'result'};
+    if(defined($aref)) {
+	my @a = @{$aref};
+	printf("Tests with wrong results [%d]:\n", $#a+1);
+	foreach my $n (@a) { print "  $n\n"; }
+    }
+    $aref=$testsDB{'proof'};
+    if(defined($aref)) {
+	my @a = @{$aref};
+	printf("Tests with failed proofs [%d]:\n", $#a+1);
+	foreach my $n (@a) { print "  $n\n"; }
+    }
+    $aref=$testsDB{'noproof'};
+    if(defined($aref)) {
+	my @a = @{$aref};
+	printf("Tests that should have proofs but don't [%d]:\n", $#a+1);
+	foreach my $n (@a) { print "  $n\n"; }
+    }
+    $aref=$testsDB{'timeFast'};
+    if(defined($aref)) {
+	my @a = @{$aref};
+	printf("Tests running faster than expected [%d]:\n", $#a+1);
+	foreach my $n (@a) { print "  $n\n"; }
+    }
+    $aref=$testsDB{'timeTooFast'};
+    if(defined($aref)) {
+	my @a = @{$aref};
+	printf("...including tests running at least twice as fast as expected [%d]:\n", $#a+1);
+	foreach my $n (@a) { print "  $n\n"; }
+    }
+    $aref=$testsDB{'time'};
+    if(defined($aref)) {
+	my @a = @{$aref};
+	printf("Tests running longer [%d]:\n", $#a+1);
+	foreach my $n (@a) { print "  $n\n"; }
+    }
+    $aref=$testsDB{'timeTooMuch'};
+    if(defined($aref)) {
+	my @a = @{$aref};
+	printf("...including tests running WAY too long [%d]:\n", $#a+1);
+	foreach my $n (@a) { print "  $n\n"; }
+    }
+    $aref=$testsDB{'lang'};
+    if(defined($aref)) {
+	my @a = @{$aref};
+	printf("Tests with wrong input language [%d]:\n", $#a+1);
+	foreach my $n (@a) { print "  $n\n"; }
+    }
+}
+
+# Delete temporary dir if there is one
+system("/bin/rm -rf $tmpdir");
+
+exit ($testsProblems > 0 ? 2 : 0);

@@ -1,0 +1,30 @@
+DOXYGEN=@DOXYGEN@
+# DOXYTAG=@DOXYTAG@
+
+FIG=theory_api_flow.fig
+JPG=$(patsubst %.fig, %.jpg, $(FIG))
+EPS=$(patsubst %.fig, %.eps, $(FIG))
+
+all: doc
+
+doc: $(JPG) $(EPS)
+ifdef DOXYGEN
+	$(DOXYGEN) Doxyfile
+# ifdef DOXYTAG
+# 	cd html; $(DOXYTAG) -s search.idx
+# endif
+else
+	@echo "doxygen is not configured; no documentation will be generated"
+endif
+
+%.jpg: %.fig
+	@FIG2DEV@ -L jpeg $< $@
+%.eps: %.fig
+	@FIG2DEV@ -L eps $< $@
+
+install:
+	@echo "Sorry, Docs installation is not implemented yet"
+
+distclean:
+	@rm -f Doxyfile *.eps *.jpg Makefile
+	@rm -rf html
