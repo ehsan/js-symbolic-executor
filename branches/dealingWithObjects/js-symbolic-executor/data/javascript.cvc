@@ -14,69 +14,104 @@
 
 % This file depends on string.cvc
 
-% The type of JavaScript values (excluding objects)
-DATATYPE
-  JSType =
-    js_true
-  | js_false
+% ObjId is used to distinguish different object that are structurally
+% identical. (All that is needed from this type is that you can always generate
+% a fresh value; I use INT only because that's easy to do with INT.) If you
+% like, you can think of the ObjId as the 'address' of the object. It is what
+% determines whether two values "refer to the same object", in the terminology
+% of ECMA-262.
+ObjId : TYPE = INT;
+
+% ECMA-262 8
+DATATYPE JSType =
+    js_undefined
   | js_null
-  | js_undefined
-  | js_NaN
-  | js_num (get_num : INT)
-  | js_string (get_str : String)
+  | js_true | js_false
+  | js_string (js_string_get : String)
+  | js_NaN | js_num (get_num : INT)
+  | js_obj (js_obj_get : ObjId)
 END;
+
+DATATYPE JSType_option =
+    JSType_None
+  | JSType_Some(JSType_Some_get: JSType)
+END;
+
+% This currently encodes only named data properties, and only their [[Value]]
+% attribute.
+Object : TYPE = ARRAY String OF JSType_option;
+
+%newObj : Object;
+%ASSERT FORALL(s:String): is_JSType_None(newObj[s]);
+
+% In the logical world, there is no such thing as mutability, so we use heaps to
+% model changes to the state. When an object, say with ObjId x, is changed, we
+% will create a new heap which is the same as the old one except that x will map
+% to the new object.
+Heap : TYPE = ARRAY ObjId OF Object;
+heap : Heap;
 
 JSNumber : TYPE = SUBTYPE(LAMBDA(x:JSType): is_js_NaN(x) OR is_js_num(x), js_NaN);
 JSBool : TYPE = SUBTYPE(LAMBDA(x:JSType): is_js_true(x) OR is_js_false(x), js_true);
 JSString : TYPE = SUBTYPE(is_js_string, js_string(char_nil));
+JSPrimitive : TYPE = SUBTYPE(LAMBDA(x:JSType): NOT is_js_obj(x), js_true);
+JSObj : TYPE = SUBTYPE(is_js_obj, js_obj(0));
 
 string_to_num: String -> JSNumber;
 int_to_string: INT -> String;
 
+% Since ToNumber, ToString, and the like might involve function calls when
+% converting objects, and those functions could have side-effects, I am assuming
+% they happen in JavaScript itself. Thus, the CVC3 encodings below only need to
+% handle primitive values.
+
 % ECMA-262 9.3
-js_ToNumber: JSType -> JSNumber =
-  LAMBDA(x:JSType):
+js_ToNumber: JSPrimitive -> JSNumber =
+  LAMBDA(x:JSPrimitive):
     IF is_js_true(x) THEN js_num(1)
     ELSIF is_js_false(x) OR is_js_null(x) THEN js_num(0)
     ELSIF is_js_undefined(x) OR is_js_NaN(x) THEN js_NaN
     ELSIF is_js_num(x) THEN x
-    ELSE string_to_num(get_str(x))
+    ELSE string_to_num(js_string_get(x))
     ENDIF;
 
+strConst_true, strConst_false, strConst_null, strConst_undefined, strConst_NaN
+  : String;
+
 % ECMA-262 9.8
-js_ToString: JSType -> String =
-  LAMBDA(x:JSType):
+js_ToString: JSPrimitive -> String =
+  LAMBDA(x:JSPrimitive):
     IF is_js_true(x) THEN strConst_true
     ELSIF is_js_false(x) THEN strConst_false
     ELSIF is_js_null(x) THEN strConst_null
     ELSIF is_js_undefined(x) THEN strConst_undefined
     ELSIF is_js_NaN(x) THEN strConst_NaN
     ELSIF is_js_num(x) THEN int_to_string(get_num(x))
-    ELSE get_str(x)
+    ELSE js_string_get(x)
     ENDIF;
 
 % ECMA-262 9.2
 toBoolean: JSType -> BOOLEAN =
-  LAMBDA (x:JSType): is_js_true(x) OR (is_js_num(x) AND NOT(get_num(x) = 0))
-    OR (is_js_string(x) AND is_char_cons(get_str(x)));
-js_ToBoolean: JSType -> JSBool =
-  LAMBDA (x: JSType): IF toBoolean(x) THEN js_true ELSE js_false ENDIF;
+  LAMBDA (x:JSType):
+    is_js_true(x) OR is_js_obj(x) OR
+    (is_js_num(x) AND NOT(get_num(x) = 0)) OR
+    (is_js_string(x) AND is_char_cons(js_string_get(x)));
+
+% Helper functions for jsnot, jseq, and jsne. (I wonder if it's worth defining
+% ne separately from eq, versus just defining jsne as NOT(jseq(x,y)).)
+not: JSType -> BOOLEAN = LAMBDA(x : JSType): NOT toBoolean(x);
+eq: (JSType, JSType) -> BOOLEAN =
+  LAMBDA(x,y : JSType): NOT (is_js_NaN(x) OR is_js_NaN(y)) AND x = y;
+ne: (JSType, JSType) -> BOOLEAN =
+  LAMBDA(x,y : JSType): is_js_NaN(x) OR is_js_NaN(y) OR NOT x = y;
 
 % Logical operators that return boolean
 jsnot: JSType -> JSBool =
-  LAMBDA (x:JSType): IF toBoolean(x) THEN js_false ELSE js_true ENDIF;
+  LAMBDA (x:JSType): IF not(x) THEN js_true ELSE js_false ENDIF;
 jseq: (JSType, JSType) -> JSBool =
-  LAMBDA (x,y : JSType):
-    IF is_js_NaN(x) OR is_js_NaN(y) THEN js_false
-    ELSIF x = y THEN js_true
-    ELSE js_false
-    ENDIF;
+  LAMBDA (x,y : JSType): IF eq(x, y) THEN js_true ELSE js_false ENDIF;
 jsne: (JSType, JSType) -> JSBool =
-  LAMBDA (x,y : JSType):
-    IF is_js_NaN(x) OR is_js_NaN(y) THEN js_true
-    ELSIF x = y THEN js_false
-    ELSE js_true
-    ENDIF;
+  LAMBDA (x,y : JSType): IF ne(x, y) THEN js_true ELSE js_false ENDIF;
 
 % Logical operators that return one of their arguments
 jsite: (JSType, JSType, JSType) -> JSType =
@@ -86,40 +121,43 @@ jsor : (JSType, JSType) -> JSType =
 jsand : (JSType, JSType) -> JSType =
   LAMBDA (x, y: JSType): IF toBoolean(x) THEN y ELSE x ENDIF;
 
-% For all of the remaining operators, I have to do more thinking about what the
-% input to CVC3 will look like: how much conversion between types will be done
-% on the JavaScript side, and how much will I have to do here.
 
-% For now, I'm pretending that the only values that can reach jsneg and jsminus
-% are numbers, that only strings and numbers reach jsplus, and that either two
-% strings or two non-strings reach the comparisons. But I'm pretty sure this
-% will have to change eventually.
 
-jsneg : JSNumber -> JSNumber =
-  LAMBDA (x: JSNumber):
-    IF is_js_NaN(x) THEN x
-    ELSE js_num(- get_num(x))
+% Mathematical operators
+jsneg : JSPrimitive -> JSNumber =
+  LAMBDA (x: JSPrimitive):
+    LET x_num = js_ToNumber(x) IN
+    IF is_js_NaN(x_num) THEN x_num
+    ELSE js_num(- get_num(x_num))
     ENDIF;
 
-jsminus : (JSNumber, JSNumber) -> JSNumber =
-  LAMBDA (x, y: JSNumber):
-    IF is_js_NaN(x) OR is_js_NaN(y) THEN js_NaN
-    ELSE js_num(get_num(x) - get_num(y))
+jsminus : (JSPrimitive, JSPrimitive) -> JSNumber =
+  LAMBDA (x, y: JSPrimitive):
+    LET x_num = js_ToNumber(x), y_num = js_ToNumber(y) IN
+    IF is_js_NaN(x_num) OR is_js_NaN(y_num) THEN js_NaN
+    ELSE js_num(get_num(x_num) - get_num(y_num))
     ENDIF;
 
 JSNumberOrString : TYPE =
   SUBTYPE(LAMBDA(x:JSType): is_js_NaN(x) OR is_js_num(x) OR is_js_string(x),
-    % Witness for type non-emptiness:
     js_NaN);
 
-jsplus : (JSNumberOrString, JSNumberOrString) -> JSNumberOrString =
-  LAMBDA (x, y: JSNumberOrString):
-    % If one is a string, both are.
-    IF is_js_string(x) THEN js_string(concat(get_str(x), get_str(y)))
-    % If either is NaN, the answer is NaN
-    ELSIF is_js_NaN(x) OR is_js_NaN(y) THEN js_NaN
-    % Otherwise, both are non-NaN numbers
-    ELSE js_num(get_num(x) + get_num(y))
+% ECMA-262 11.6.1
+jsplus : (JSPrimitive, JSPrimitive) -> JSNumberOrString =
+  LAMBDA (x, y: JSPrimitive):
+    % If either is a string, concatenate.
+    IF is_js_string(x) OR is_js_string(y)
+    THEN
+      LET x_str = js_ToString(x), y_str = js_ToString(y) IN
+      js_string(concat(x_str, y_str))
+    ELSE
+      LET x_num = js_ToNumber(x), y_num = js_ToNumber(y) IN
+      % If either is NaN, the answer is NaN.
+      IF is_js_NaN(x_num) OR is_js_NaN(y_num)
+      THEN js_NaN
+      % Otherwise, both are non-NaN numbers.
+      ELSE js_num(get_num(x_num) + get_num(y_num))
+      ENDIF
     ENDIF;
 
 DATATYPE
@@ -130,35 +168,42 @@ END;
 % 11.8.5 . It evaluates to undefined if either operand is NaN; otherwise, it
 % evaluates to (the value of) x < y.
 
-abstract_lt : (JSType, JSType) -> ternary =
-  LAMBDA (x, y: JSType):
-    IF is_js_string(x) % x is a string, so y must be, too.
+abstract_lt : (JSPrimitive, JSPrimitive) -> ternary =
+  LAMBDA (x, y: JSPrimitive):
+    IF is_js_string(x) AND is_js_string(y)
     THEN
-      IF string_less_than(get_str(x), get_str(y))
+      IF string_less_than(js_string_get(x), js_string_get(y))
       THEN ternary_true
       ELSE ternary_false
       ENDIF
     ELSE
-      LET x_num = js_ToNumber(x) IN
-      IF is_js_NaN(x_num) THEN ternary_undefined
-      ELSE
-        LET y_num = js_ToNumber(y) IN
-        IF is_js_NaN(y_num) THEN ternary_undefined
-        ELSIF get_num(x) < get_num(y) THEN ternary_true
-        ELSE ternary_false
-        ENDIF
+      LET x_num = js_ToNumber(x), y_num = js_ToNumber(y) IN
+      % If either is NaN, the answer is undefined
+      IF is_js_NaN(x_num) OR is_js_NaN(y_num)
+      THEN ternary_undefined
+      % Otherwise, both are non-NaN numbers
+      ELSIF get_num(x_num) < get_num(y_num)
+      THEN ternary_true
+      ELSE ternary_false
       ENDIF
     ENDIF;
 
-jslt: (JSType, JSType) -> JSBool =
-  LAMBDA (x, y: JSType):
+jslt: (JSPrimitive, JSPrimitive) -> JSBool =
+  LAMBDA (x, y: JSPrimitive):
     IF is_ternary_true(abstract_lt(x, y)) THEN js_true ELSE js_false ENDIF;
-jsgt : (JSType, JSType) -> JSBool =
-  LAMBDA (x, y: JSType):
+jsgt : (JSPrimitive, JSPrimitive) -> JSBool =
+  LAMBDA (x, y: JSPrimitive):
     IF is_ternary_true(abstract_lt(y, x)) THEN js_true ELSE js_false ENDIF;
-jsle : (JSType, JSType) -> JSBool =
-  LAMBDA (x, y: JSType):
+jsle : (JSPrimitive, JSPrimitive) -> JSBool =
+  LAMBDA (x, y: JSPrimitive):
     IF is_ternary_false(abstract_lt(y, x)) THEN js_true ELSE js_false ENDIF;
-jsge : (JSType, JSType) -> JSBool =
-  LAMBDA (x, y: JSType):
+jsge : (JSPrimitive, JSPrimitive) -> JSBool =
+  LAMBDA (x, y: JSPrimitive):
     IF is_ternary_false(abstract_lt(x, y)) THEN js_true ELSE js_false ENDIF;
+
+jsgetProp : (JSObj, JSString) -> JSType =
+  LAMBDA(x: JSObj, y: JSString):
+    LET val = heap[js_obj_get(x)][js_string_get(y)] IN
+    IF is_JSType_None(val)
+    THEN js_undefined
+    ELSE JSType_Some_get(val) ENDIF;

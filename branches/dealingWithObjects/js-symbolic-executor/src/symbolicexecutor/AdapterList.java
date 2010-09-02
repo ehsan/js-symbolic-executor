@@ -34,7 +34,8 @@ final class AdapterList {
   public static final AdapterList DEFAULT_ADAPTERS =
     new AdapterList(SymbolicValueAdapter.ADAPTER,
         SymbolicOperationAdapter.ADAPTER,
-        JsValueAdapter.ADAPTER);
+        JsObjectAdapter.ADAPTER,
+        JsPrimitiveAdapter.ADAPTER);
 
   /**
    * @param adapters The adapters to use. They will be tried in the order in

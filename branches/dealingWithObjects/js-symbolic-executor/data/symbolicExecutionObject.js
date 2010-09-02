@@ -20,32 +20,37 @@
 var symbolicExecution =
 (function() {
   var memory,
-  memoryStack = [],
+  memoryStack = [], // This currently only handles local variables (no scope chains or globals)
   pathCondition = [],
+  emptyObject = {},
+  heap = [],
   returnValue,
-  Operation = function(symbol, args) {
-    return {
-      getSymbol: function() {
-        return symbol;
-      },
-      getArg: function(n) {
-        return args[n];
-      },
-      arity: function() {
-        return args.length;
-      }
+  locationId = 0,
+  SymbolicOperation = function(symbol, args) {
+    this.getSymbol = function() {
+      return symbol;
+    };
+    this.getArg = function(n) {
+      return args[n];
+    };
+    this.arity = function() {
+      return args.length;
     };
   },
   SymbolicValue = function(a) {
-    return {
-      symbolicValue: 'sym' + a
-    };
+    this.symbolicValue = 'sym' + a;
   },
-  unop = function(symbol, a) {
-    return new Operation(symbol, [a]);
+  Location = function(arguments) {
+    this.location = locationId++;
   },
-  binop = function(symbol, a, b) {
-    return new Operation(symbol, [a, b]);
+  op1 = function(symbol, a) {
+    return new SymbolicOperation(symbol, [a]);
+  },
+  op2 = function(symbol, a, b) {
+    return new SymbolicOperation(symbol, [a, b]);
+  },
+  op3 = function(symbol, a, b, c) {
+    return new SymbolicOperation(symbol, [a, b, c]);
   },
   // Define push here so execute can call it.
   push = function(args) {
@@ -77,7 +82,7 @@ var symbolicExecution =
       memory = memoryStack[memoryStack.length - 1];
     },
     addCondition: function(condition) {
-      pathCondition.push(condition);
+      pathCondition.push([condition, heap.length]);
     },
     setReturnValue: function(value) {
       returnValue = value;
@@ -85,41 +90,57 @@ var symbolicExecution =
     getReturnValue: function() {
       return returnValue;
     },
+    createObject: function() {
+      var newLocation = new Location();
+      var newObject = emptyObject;
+      // Note that this for loop converts all property names to strings, and
+      // overwrites duplicate property names with the last such value given.
+      // This behavior is correct; see ECMA-262, Ed. 3, 11.1.5.
+      for (var i = 0; i < arguments.length; i += 2) {
+        newObject = op3('jssetProp', newObject, String(arguments[i]),
+                              arguments[i+1]);
+      }
+      heap.push([newLocation, newObject]);
+      return newLocation;
+    },
     SHEQ: function(a, b) {
-      return binop('jseq', a, b);
+      return op2('jseq', a, b);
     },
     LE: function(a, b) {
-      return binop('jsle', a, b);
+      return op2('jsle', a, b);
     },
     LT: function(a, b) {
-      return binop('jslt', a, b);
+      return op2('jslt', a, b);
     },
     GE: function(a, b) {
-      return binop('jsge', a, b);
+      return op2('jsge', a, b);
     },
     GT: function(a, b) {
-      return binop('jsgt', a, b);
+      return op2('jsgt', a, b);
     },
     ADD: function(a, b) {
-      return binop('jsplus', a, b);
+      return op2('jsplus', a, b);
     },
     SUB: function(a, b) {
-      return binop('jsminus', a, b);
+      return op2('jsminus', a, b);
     },
     NEG: function(a) {
-      return unop('jsneg', a);
+      return op1('jsneg', a);
     },
     NOT: function(a) {
-      return unop('jsnot', a);
+      return op1('jsnot', a);
     },
     OR: function(a, b) {
-      return binop('jsor', a, b);
+      return op2('jsor', a, b);
     },
     AND: function(a, b) {
-      return binop('jsand', a, b);
+      return op2('jsand', a, b);
     },
     HOOK: function(guard, trueExp, falseExp) {
-      return new Operation('jsite', [guard, trueExp, falseExp]);
+      return op3('jsite', guard, trueExp, falseExp);
+    },
+    GETPROP: function(base, property) {
+      return op2('jsgetProp', base, property);
     }
   };
 })();

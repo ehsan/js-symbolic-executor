@@ -16,34 +16,10 @@
 
 package symbolicexecutor;
 
-import cvc3.Expr;
 
 /**
+ * One type of basic {@link SymbolicExpression}: a JavaScript primitive.
  * @author elnatan@google.com (Elnatan Reisner)
- *
  */
-public class JsBool implements JsPrimitive {
-  /** The encapsulated boolean value */
-  private final boolean bool;
-
-  private JsBool(boolean value) {
-    this.bool = value;
-  }
-
-  public static JsBool create(boolean bool) {
-    return new JsBool(bool);
-  }
-
-  /* (non-Javadoc)
-   * @see SymbolicExpression#toCvc3(Cvc3Context)
-   */
-  @Override
-  public Expr toCvc3(Cvc3Context context) {
-    return context.construct(bool ? "js_true" : "js_false");
-  }
-
-  @Override
-  public String toString() {
-    return Boolean.toString(bool);
-  }
+interface JsPrimitive extends SymbolicExpression {
 }

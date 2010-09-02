@@ -19,7 +19,7 @@ package symbolicexecutor;
 import junit.framework.TestCase;
 
 import java.io.IOException;
-import java.util.Set;
+import java.util.Map;
 
 /**
  * @author elnatan@google.com (Elnatan Reisner)
@@ -33,7 +33,7 @@ public class SymbolicExecutorTest extends TestCase {
     String filename = "test/data/sample.js";
     String[] args = { "0", "5" };
     try {
-      Set<Output> output = test(filename, 5, args);
+      Map<Input, Output> output = test(filename, 5, args);
       assertEquals(5, output.size());
     } catch (IOException e) {
       e.printStackTrace();
@@ -45,7 +45,7 @@ public class SymbolicExecutorTest extends TestCase {
     String filename = "test/data/generationalSearch.js";
     String[] args = { "0", "0", "0", "0" };
     try {
-      Set<Output> output = test(filename, 100, args);
+      Map<Input, Output> output = test(filename, 100, args);
       assertEquals(16, output.size());
     } catch (IOException e) {
       e.printStackTrace();
@@ -56,14 +56,14 @@ public class SymbolicExecutorTest extends TestCase {
   public void testString() throws IOException {
     String filename = "test/data/stringTest.js";
     String[] args = { "5", "10" };
-    Set<Output> output = test(filename, 10, args);
+    Map<Input, Output> output = test(filename, 10, args);
     assertEquals(3, output.size());
   }
 
-  private Set<Output> test(String filename, int maxNumInputs, String... args)
-      throws IOException {
+  private Map<Input, Output> test(String filename, int maxNumInputs,
+      String... args) throws IOException {
     Cvc3Context context = Cvc3Context.create(args.length, loader);
-    Set<Output> o = SymbolicExecutor.create(filename, loader,
+    Map<Input, Output> o = SymbolicExecutor.create(filename, loader,
         new ApiBasedInputGenerator(context), maxNumInputs, "f", args).run();
     return o;
   }

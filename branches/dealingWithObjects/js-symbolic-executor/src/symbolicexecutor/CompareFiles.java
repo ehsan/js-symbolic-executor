@@ -16,14 +16,15 @@
 
 package symbolicexecutor;
 
-import com.google.common.collect.Sets;
+import com.google.common.collect.Maps;
 
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ContextFactory;
 import org.mozilla.javascript.ScriptableObject;
 
 import java.io.IOException;
-import java.util.Set;
+import java.util.Map;
+import java.util.Map.Entry;
 
 /**
  * An object that runs symbolic execution on one program to generate a bunch of
@@ -60,12 +61,13 @@ public class CompareFiles {
 
   /**
    * @param maxTests the maximum number of tests to generate
-   * @return the set of differences between the old and new programs, given as
-   *         pairs (x, y), where x is the {@link Output} from the original
-   *         program and y is the new program's output on {@code x.input}
-   * @throws IOException
+   * @return the differences between the old and new programs, given as a map
+   *         from Inputs to pairs (x, y), where x is the {@link Output} from the
+   *         original program and y is the new program's result.
+   * @throws IOException if one of the programs cannot be loaded.
    */
-  public Set<Pair<Output, Object>> compare(FileLoader loader, int maxTests)
+  public Map<Input, Pair<Output, Object>> compare(FileLoader loader,
+      int maxTests)
   throws IOException {
     Cvc3Context cvc3Context = Cvc3Context.create(arguments.length, loader);
     NewInputGenerator inputGenerator = new ApiBasedInputGenerator(cvc3Context);
@@ -73,18 +75,20 @@ public class CompareFiles {
         originalProgram, loader, inputGenerator, maxTests, entryFunction,
         arguments);
     Context rhinoContext = Context.enter();
-    Set<Pair<Output, Object>> differences = Sets.newHashSet();
+    Map<Input, Pair<Output, Object>> differences = Maps.newHashMap();
     // Run symbolic execution, and iterate through all generated inputs
-    for (Output output : executor.run()) {
+    for (Entry<Input, Output> inputOutput : executor.run().entrySet()) {
+      Input input = inputOutput.getKey();
+      Output output = inputOutput.getValue();
       // Run the new program with the old arguments
       ScriptableObject scope = rhinoContext.initStandardObjects();
       rhinoContext.evaluateString(scope, loader.toString(newProgram),
           "new program", 0, null);
       Object result = ScriptableObject.callMethod(scope, entryFunction,
-          output.input.toArray(ContextFactory.getGlobal()));
+          input.toArray(ContextFactory.getGlobal()));
       // If the results differ, add them to the set of differences
       if (!output.result.equals(result)) {
-        differences.add(new Pair<Output, Object>(output, result));
+        differences.put(input, new Pair<Output, Object>(output, result));
       }
     }
     return differences;

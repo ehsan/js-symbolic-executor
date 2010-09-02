@@ -21,22 +21,19 @@ import java.util.Set;
 /**
  * The result of taking one execution path through the program.
  * <p>
- * This includes the input that was used, the path condition that generalizes
- * this input but still guarantees executing the same path, and the JavaScript
- * object that was returned by the entry function. Later, we may also want to
- * include the concrete and symbolic states at the end of execution.
+ * This includes the path condition for the path that was taken, and the
+ * JavaScript object that was returned by the entry function. Later, we may also
+ * want to include the concrete and symbolic states at the end of execution.
  *
  * @author elnatan@google.com (Elnatan Reisner)
  *
  */
 class Output {
-  final Input input;
   final Set<SymbolicExpression> pathCondition;
   final Object result;
 
   public Output(Input input, Set<SymbolicExpression> pathCondition,
       Object result) {
-    this.input = input;
     this.pathCondition = pathCondition;
     this.result = result;
   }
@@ -47,8 +44,8 @@ class Output {
   @Override
   public String toString() {
     return String.format(
-        "\nInput:\n  %s\nOutput:\n  %s\nGeneralized input:\n  %s\n",
-        input.toString(), JsValueAdapter.ADAPTER.fromJS(result).toString(),
+        "Output:\n  %s\nPath condition:\n  %s",
+        JsPrimitiveAdapter.ADAPTER.fromJS(result).toString(),
         pathCondition.toString());
   }
 }

@@ -22,7 +22,7 @@ import cvc3.Expr;
  * @author elnatan@google.com (Elnatan Reisner)
  *
  */
-public class JsDouble implements JsValue {
+public class JsDouble implements JsPrimitive {
   /** The encapsulated double value */
   private final double value;
 

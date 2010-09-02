@@ -22,7 +22,7 @@ import cvc3.Expr;
  * @author elnatan@google.com (Elnatan Reisner)
  *
  */
-public class JsUndefined implements JsValue {
+public class JsUndefined implements JsPrimitive {
   /** Private constructor because this is a singleton class. */
   private JsUndefined() {}
 

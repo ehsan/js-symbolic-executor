@@ -19,19 +19,17 @@ package symbolicexecutor;
 import org.mozilla.javascript.Undefined;
 
 /**
- * An adapter to transform JavaScript values to {@link JsValue}s.
+ * An adapter to transform JavaScript values to {@link JsPrimitive}s.
  * @author elnatan@google.com (Elnatan Reisner)
  */
-final class JsValueAdapter implements SymbolicExpressionAdapter {
+final class JsPrimitiveAdapter implements SymbolicExpressionAdapter {
   // Singleton class
-  private JsValueAdapter() {}
-  public static final JsValueAdapter ADAPTER = new JsValueAdapter();
+  private JsPrimitiveAdapter() {}
+  public static final JsPrimitiveAdapter ADAPTER = new JsPrimitiveAdapter();
 
-  /** Converts an Object to a JsValue. */
-  public JsValue fromJS(Object obj) {
-    if (obj instanceof Boolean) {
-      return JsBool.create((Boolean) obj);
-    } else if (obj instanceof Double) {
+  /** Converts an Object to a JsPrimitive. */
+  public JsPrimitive fromJS(Object obj) {
+    if (obj instanceof Double) {
       return JsDouble.create((Double) obj);
     } else if (obj instanceof Integer) {
       return JsDouble.create((Integer) obj);
@@ -47,7 +45,7 @@ final class JsValueAdapter implements SymbolicExpressionAdapter {
    * @see SymbolicExpressionAdapter#fromJS(Object, AdapterList)
    */
   @Override
-  public JsValue fromJS(Object obj, AdapterList ignored) {
+  public JsPrimitive fromJS(Object obj, AdapterList ignored) {
     return fromJS(obj);
   }
 }

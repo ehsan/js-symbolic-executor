@@ -19,7 +19,7 @@ package symbolicexecutor;
 import junit.framework.TestCase;
 
 import java.io.IOException;
-import java.util.Set;
+import java.util.Map;
 
 /**
  * A TestCase for comparing two files using symbolic execution.
@@ -35,8 +35,9 @@ public class CompareFilesTest extends TestCase {
     String newFile = "test/data/generationalSearchRight.js";
     CompareFiles comparer = new CompareFiles(oldFile, newFile, "f",
         "0", "0", "0", "0");
-    Set<Pair<Output, Object>> diffs = comparer.compare(new FileLoader(), 1000);
-    assertEquals(0, diffs.size());
+    Map<Input, Pair<Output, Object>> diffs =
+      comparer.compare(new FileLoader(), 1000);
+    assertTrue(diffs.isEmpty());
   }
 
   /**
@@ -48,7 +49,8 @@ public class CompareFilesTest extends TestCase {
     String newFile = "test/data/generationalSearchWrong.js";
     CompareFiles comparer = new CompareFiles(oldFile, newFile, "f",
         "10", "0", "10", "0");
-    Set<Pair<Output, Object>> diffs = comparer.compare(new FileLoader(), 1000);
+    Map<Input, Pair<Output, Object>> diffs =
+      comparer.compare(new FileLoader(), 1000);
     assertEquals(7, diffs.size());
   }
 }
