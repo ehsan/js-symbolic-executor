@@ -54,7 +54,7 @@
 	 antfile="build.xml"
 	 target="clean" />
     <exec dir="../cvc3" executable="/usr/bin/make">
-      <arg value="clean"/>
+      <arg value="distclean"/>
     </exec>
   </target>
 
