@@ -1,0 +1,47 @@
+% Copyright 2010 Google Inc.
+%
+% Licensed under the Apache License, Version 2.0 (the "License");
+% you may not use this file except in compliance with the License.
+% You may obtain a copy of the License at
+%
+%     http://www.apache.org/licenses/LICENSE-2.0
+%
+% Unless required by applicable law or agreed to in writing, software
+% distributed under the License is distributed on an "AS IS" BASIS,
+% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+% See the License for the specific language governing permissions and
+% limitations under the License.
+
+% JavaScript's characters are 16 bits. It would probably be better to use
+% BITVECTOR(16) for Chars, but the Java API in version 2.2 of CVC3 doesn't
+% expose computeBVConst, which makes it possible to get an integer out of a
+% bitvector. Development versions of CVC3, at least as of 2010-06-29, do expose
+% that in the Java API, so we should be able to change this soon.
+Char: TYPE = [0..65535];
+
+DATATYPE
+  CharList =
+    char_nil
+  | char_cons(char_hd: Char, char_tl: CharList)
+END;
+String : TYPE = CharList;
+
+Nonneg: TYPE = SUBTYPE(LAMBDA (x: INT): x >= 0);
+
+%strlen: String -> Nonneg;
+
+%ASSERT FORALL(str: String):
+%  strlen(str) =
+%    IF is_char_nil(str) THEN 0
+%    ELSE 1 + strlen(char_tl(str))
+%    ENDIF;
+
+concat: (String, String) -> String;
+
+%ASSERT FORALL(a,b: String):
+%  concat(a,b) =
+%  IF is_char_nil(a) THEN b
+%  ELSE char_cons(char_hd(a), concat(char_tl(a), b))
+%  ENDIF;
+
+string_less_than : (String, String) -> BOOLEAN;

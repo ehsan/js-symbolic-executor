@@ -1,0 +1,680 @@
+Java Interface for CVC3
+-----------------------
+
+This document describes the Java wrapper for the CVC3 library.
+
+Table of contents:
+1 Outline
+
+2 Files
+
+3 Installation
+3.1 Required Software
+3.2 Building the interface
+3.3 Binaries
+3.4 Installation
+3.5 Execution
+3.6 Testing
+
+4 Architecture
+4.1 Embedding a C++ Class: the Mapping Layer
+4.2 Embedding a C++ Class: in a Java Class
+4.3 Garbage Collection
+4.4 Constant vs. Mutable
+4.5 Data Conversions
+4.6 Native Methods
+
+5 Status
+5.1 ToDo
+5.2 Testing
+5.3 Problems
+
+6 Frequenty Asked Questions
+6.1 Why does my application segfault when calling into CVC3 library?
+
+7 Reporting Bugs
+
+1 Outline
+---------
+
+As CVC is written in C++, JNI is used to access it from Java.
+see: http://java.sun.com/developer/onlineTraining/Programming/JDCBook/jni.html
+
+This consists of:
+- writing a Java wrapper class for each exported C++ class,
+  which declares each method exported from CVC3 as native
+
+- implementing each declared native function in c,
+  which consists of calling the actual CVC3 function and
+  taking care of data conversion and destruction.
+  (let's call this the mapping layer)
+
+
+
+2 Files
+-------
+
+The whole source has been added as a new top level directory 'java' in CVC3.
+
+The main directory contains:
+- README
+- Makefile, create_impl.py: create the binaries
+- Cvc3_manifest, Test_manifest: manifest files for Java libraries
+- run_tests.py, run_all.py: test scripts
+
+All source files are located in src/cvc3,
+all header files in             include/cvc3,
+all compiled binaries in        obj/cvc3,
+and all libraries in            lib.
+
+The cvc3 prefix is due to the Java files being in the name space Cvc3,
+which must be mimicked in the directory structure.
+
+For each exported CVC class A there exist the source files:
+- src/A.java, mirroring A's interface in Java
+- src/A.cpp, using CVC's A to implement the native functions used in A.java
+
+Derived files are:
+- include/A.h, an automatically generated header file corresponding
+  to the native functions declared in A.java
+- the compiled classes and functions obj/A.class, obj/A.o
+
+Additional source files are:
+- src/JniUtils.java, src/JniUtils.h, src/JniUtils.cpp:
+  taking care of common conversion operations between Java and cpp
+- src/Embedded.java, src/EmbeddedManager.java:
+  taking care of garbage collection of C++ objects
+- src/Cvc3.java: a command line tool built on top of the wrapper
+- src/Test.java: mirroring CVC's C++ interface tests built on top of the wrapper
+
+
+
+3 Installation
+--------------
+
+3.1 Required Software
+---------------------
+
+This is Linux only, in addition to CVC3's usual requirements
+a JDK 1.4.2 or higher is needed.
+
+Because the interface is developed for integration into EscJava, and EscJava
+needs to run on a Java 1.4 vm, the source is restricted to Java 1.4 features
+as well (i.e. no generics, no enums, ...).
+
+3.2 Building the interface
+------------------
+
+The interface can be build alongside CVC3 using the --enable-java
+configuration option. The configuration script refers to the
+environment variables JAVAC, JAVAH, JAR, and CXX to set up the
+standard Java and C++ compiler commands. It refers to the environment
+variable JFLAGS for default Java compiler flags. It refers to the
+variable javadir for the installation directory of the CVC3 Java
+library.
+
+The configuration options --with-java-home and --with-java-includes
+can be used to specify the path to the directories containing the JDK
+installation and JNI header files, respectively.
+
+You must build CVC3 as a dynamic library to use the Java
+interface. For example, you might configure the build by running the
+following in the top-level CVC3 directory:
+
+    ./configure --enable-dynamic --enable-java
+
+Detailed instructions are in ../INSTALL.
+
+NOTE: The Java interface depends on the "build type" (e.g.,
+"optimized", "debug) of CVC3. If you choose to re-configure and
+re-build CVC3 with a different build type, you must run "make clean"
+in the current directory and re-build the interface (cleaning and 
+rebuilding the entire CVC3 package will suffice).
+
+3.3 Binaries
+------------
+
+The compiled binaries are put in lib/ :
+
+Two dynamic libraries:
+
+- libcvc3jni.so: the wrapper library containing the implementations
+  of native functions
+
+- libcvc3-X.Y.Z.jar (where "X.Y.Z" is the version of CVC3): 
+  the Java library containing the Java wrapper classes
+
+Two Java programs:
+
+- cvc3.jar: a Java program mirroring the CVC3 command line version
+
+- cvc3test.jar: a Java program mirroring the CVC3 C++ interface tests
+
+3.4 Installation
+----------------
+
+"make install" copies libcvc3jni.so into the same directory as
+libcvc3.so (by default, /usr/local/lib) and the Java library into
+the directory specified by javadir (by default, /usr/local/java).
+
+
+3.5 Execution
+-------------
+
+To access the library, you must add the file libcvc3-X.Y.Z.jar (where
+"X.Y.Z" is the CVC3 version) to the classpath (e.g., by setting the
+CLASSPATH environment variable) and both libcvc3.so and libcvc3jni.so
+to the runtime library path (e.g., by setting the LD_LIBRARY_PATH
+environment variable and the java.library.path JVM system variable). 
+
+For example, to compile the class Client.java:
+
+  javac -cp lib/libcvc3.jar Client.java
+
+To run:
+
+  export LD_LIBRARY_PATH=/path/to/cvc3/libs
+  java -Djava.library.path=/path/to/cvc3/libs -cp lib/libcvc3.jar Client
+
+Note that libcvc3.so and libcvc3jni.so may be installed into different
+directories, so that LD_LIBRARY_PATH may need to include multiple paths.
+For example,
+
+  export LD_LIBRARY_PATH=/usr/local/lib:/usr/local/java/lib
+
+The cvc3.jar can be used the same way as the cvc3 command line tool,
+but instead of
+
+  cvc3 <options> file
+
+the command (from the java directory) is
+
+  java -jar lib/cvc3.jar <options> file
+
+To enable debug assertions add the option -ea,
+to avoid stack overflows it might be necessary to increase the stack limit:
+  -Xss10M (see 5.3 Problems),
+which gives:
+
+  java -ea -Xss10M -jar lib/cvc3.jar <options> file
+  
+
+Running cvc3.jar will cause loading of the dynamic libraries:
+1. libcvc3-X.Y.Z.jar, as CVC3 uses the Java wrapper classes
+2. libcvc3jni.so, as it implements the native functions declared in 
+   libcvc3-X.Y.Z.jar
+3. libcvc3.so, as it is used by libcvc3jni.so
+
+
+
+3.6 Testing
+-----------
+
+The tests in CVC3's test project can be run (except for the george
+tests) with
+
+  make test
+
+The regression tests with:
+
+  make regress
+
+Smtlib tests with:
+
+  ./run_tests.py -vc 'java -ea -Xss100M -jar lib/cvc3.jar' -t 5 -m 500 -l 5 -lang smtlib <path_to_smtlib>
+
+Or (after editing the paths and options in run_all.py) with:
+
+  ./run_all.py
+
+
+
+
+4 Architecture
+--------------
+
+
+4.1 Embedding a C++ Class: the Mapping Layer
+--------------------------------------------
+
+A CVC object needs to be accessed/wrapped by a Java object.
+Thus, it must be mapped somehow to Java's type system.
+
+One way to do this would be to use integers representing objects.
+Then in the mapping layer an object C would be mapped to its integer id i,
+which would be stored in its Java wrapper object J.
+When a method of C needs to be accessed, J passes i back to the mapping layer,
+which retrieves C and calls the requested method.
+
+One problem with this approach is the need for mapping data structures.
+If these are global they need to be thread safe in case several ValidityCheckers
+are active at the same time. If they are local, they must be stored in J
+as well, and given as an additional argument to the wrapper layer.
+The mapping itself is an unsafe type cast from int to an arbitrary class,
+which might lead to subtle bugs if the interface changes
+(e.g. from mutable to immutable for some returned value,
+see 4.4 Constant vs. Mutable).
+
+Because of this an object is exported as a pointer to the Java level.
+This is possible using a DirectByteBuffer, which can store a real pointer,
+not a long or int which would introduce a dependency on the architecture.
+Now no mapping data structures are needed.
+
+In reality an object C is embedded in another object of class Embedded,
+which additionally stores C's type_info and a specialized delete function.
+(see include/cvc3/JniUtils.h).
+The type_info is used only for debugging purposes, to make sure that
+when extracting C it is casted to the correct type.
+
+The delete function is specialized for C's type as well.
+When the wrapping is only by reference, i.e. the object is still owned by
+CVC and not by the Java wrapper, then the delete operation will do nothing.
+Combined this allows all Java wrapper classes to call the same delete function
+on their embedded a C++ object, as it is actually of type Embedded, and Embedded
+knows how to delete the real wrapped C++ object.
+
+
+4.2 Embedding a C++ Class: in a Java Class
+------------------------------------------
+
+Wrapping a CVC object C in a Java object J is done using the following scheme,
+where the abstract Java class Embedded is used as the base class
+for all wrapper objects:
+
+- Embedded contains C as an Object (kind of like void*),
+  which is actually the Embedded C++ class described in 4.1.
+- J subclasses Embedded
+- J's constructor takes C as an argument (of type Object)
+- A call to a method of C is mirrored as a method of J,
+  which calls a native function taking C as its argument.
+
+
+Example: a wrapper for the CVC class Type exporting the method isBool
+
+Embedded.java:
+public abstract class Embedded {
+    // embedded C++ object
+    private Object d_embedded;
+
+    // access to embedded C++ object
+    public synchronized Object embedded() {
+	return d_embedded;
+    }
+}
+
+Type.java:
+public class Type extends Embedded {
+    // jni methods
+    private static native boolean jniIsBool(Object Type);
+
+    /// Constructor
+    public Type(Object Type) {
+	super(Type);
+    }
+
+    /// API
+    boolean isBoolean() {
+	return jniIsBool(embedded());
+    }
+}
+
+Type.cpp:
+implements jniIsBool to call isBool on the given Type object
+
+
+
+The benefit of subclassing Embedded is:
+- there is exactly one class which deals with pointers
+- it deals with garbage collection as well, by storing an EmbeddedManager
+  and providing an appropriate finalizer (see 4.3 Garbage Collection)
+
+
+
+
+4.3 Garbage Collection
+----------------------
+
+As a CVC object C is wrapped in a Java object J,
+- C must exist while J is used
+- C must be destructed at some point after J is not used anymore.
+
+In the simplest cases this can be achieved by:
+
+a) Require the user to explicitly call some destructor function on J
+  which will destruct C. This is inconvenient and error prone
+  from the user's point of view.
+
+b) Never destruct C objects. This is fine for a one time use of CVC,
+  e.g. in the command line tool, but not in an incremental setting
+  (EscJava)
+
+c) Do nothing except for explicitly destructing the ValidityChecker.
+  This will automatically destruct all expressions and theorems constructed
+  using this ValidityChecker (or: its expression and theorem manager),
+  but not other object as e.g. proofs. These still have to be destructed
+  explicitly as in a), and the comment in b) still applies.
+
+d) try to use Java's garbage collector to improve on a) or c).
+
+
+I tried to go with d), because of the problems listed in a) and b).
+That is, when J is garbage collected its finalizer does something
+to trigger the destruction of C.
+Now, the problem is that Java's finalizer runs in its own thread,
+parallel to the main thread, while CVC is not thread safe.
+(There are actually six threads when running cvc.jar).
+
+Thus, race conditions might be introduced by the code executed in destructors,
+and in fact one for sure exists: the reference counting done by CVC to implement
+its internal memory management of expressions (triggered during testing).
+
+(Another potential problem is memory allocation:
+using the malloc memory manager should be fine, as malloc/free are supposed
+to be thread safe, but what about the chunk memory manager?
+I don't think there is a problem and haven't observed one,
+but I am not sure if it's really safe.)
+
+Therefore access to CVC has to be serialized, i.e. the destruction of C
+requested in the finalization of J has to be executed in the main thread
+as far as CVC is concerned. To achieve this, there exists the class
+EmbeddedManager, which servers as this synchronization point.
+The constructor of Embedded (of which J is a subclass) takes an EmbeddedManager
+as an argument, and whenever it is is finalized, it registers the reference to C
+with its EmbeddedManager.
+
+The EmbeddedManager can be asked to destruct all registered objects at any time
+- but by convention from the main thread only. This is supposed to be done
+either explicitly by the user (at any convenient times), or implicitly when the
+ValidityChecker is destructed (which works only for expressions and theorems).
+
+Thus a typical usage pattern would be:
+
+ValidityChecker vc = null;
+try {
+  vc = ValidityChecker.create();
+  ...
+  vc.assertFormula(...);
+  ...
+  vc.push()
+  Expr x = ...
+  Expr y = ...
+  vc.query(vc.impliesExpr(x, y));
+  vc.pop()
+  ...
+  
+} finally {
+  if (vc != null) vc.delete();
+}
+
+All intermediate expressions are garbage collected when not needed anymore,
+and only the ValidityChecker is garbage collected explicitly using vc.delete().
+As Embedded implements delete(), it can be called on each wrapper class
+including Expr do mark it for destruction. To actually destruct the wrapped
+C object the EmbeddedManager must be told so (e.g. after vc.pop() ):
+
+  vc.embeddedManager().cleanUp();
+
+
+Note: Having Embedded and thus all wrapper classes implement a finalizer is
+potentially expensive, but that's the best solution I found.
+
+
+
+4.4 Constant vs. Mutable
+------------------------
+
+const C++ objects are immutable, but this has no counterpart in Java.
+To mirror this effect, each CVC class C is represented by two Java classes,
+J and JMut:
+- J implements the immutable interface of C, i.e. the const methods
+- JMut subclasses J and adds the non-const methods of C
+
+Thus when a CVC method returns a const object C, then the Java method returns
+the corresponding object J, but if plain C is returned then Java returns JMut.
+
+Note: Except for ValidityChecker I defined J and JMut for each wrapped class,
+even if it might only be intended for constant use.
+
+
+
+4.5 Data Conversions
+--------------------
+
+'Native' types (int, boolean, string) are converted between C++ and Java
+in the standard way.
+
+Wrapped classes are handled as described in the previous sections.
+
+Collection types are mapped in an expensive way, by using the native types
+on the C++ (vector, hash_map) and the Java (List, HashMap) side,
+and Arrays in between, as those can be used most easily in JNI.
+
+Note: There might be more efficient ways using more sophisticated method calls
+building up C++ collections from the Java side and vice versa,
+but for lack of time and preference of simplicity I did not look into that.
+
+C++ enums have no real counterpart in Java 1.4, so a standard way of simulating
+them was used (see e.g. QueryResult.java). For each enum value the Java wrapper
+has a final static instance, whose name is the name of the value as a string.
+This mapping of enums to strings serves to make sure that there is no dependency
+on the integers chosen to represent the enums, as well as to guard against
+changes of the enum: new unknown values will be caught at runtime and trigger
+an assertion failure.
+
+CVC uses exceptions, but C++ exceptions are not compatible with Java exceptions.
+Therefore each native function is guarded by a try .. catch, and in case
+an exception is thrown it is mapped to a Java exception which is thrown instead.
+
+All mapping functions are defined in the JniUtils files:
+src/cvc3/JniUtils.java, src/cvc3/JniUtils.cpp, include/cvc3/JniUtils.h
+
+
+
+4.6 Native Methods
+------------------
+
+For each exported method M of a CVC class C wrapped by the Java class J
+there must be:
+- the declaration of native method jniM in J
+- the implementation of jniM in the mapping layer, which results in calling M
+
+The jni compiler will create a header file for all native methods declared in J,
+but it is up to us to implement them in the mapping layer.
+This can be problematic, as g++ does
+- neither check that all functions declared in a header file are actually
+  defined anywhere
+- nor if for some defined function there exists a declaration in a header file
+
+But to avoid code decay a tight 1:1 coupling is convenient here,
+esp. as the header files are generated automatically.
+
+Note: Esp. as at least with some compilers there seems to be some strange
+behavior when there are several native functions with the same name but
+different signatures on the Java side. This is resolved by name mangling in the
+header file, but apparently confusion can arise if there exists an
+implementation using the unmangled name. Then the linker might use it instead
+of any of the mangled names.
+This occurred as methods are exported as needed, one by one, leading to exactly
+this situation where the header and its implementation were out of synch.
+
+To avoid this the script create_impl.py is used, which checks a header file
+against an implementation file, to ensure that there is a 1:1 mapping
+between declarations and definitions.
+
+
+Furthermore, a lot of the code of the mapping layer is basically the same for
+each function. It consists of a signature, some extractions and wrappings
+of embedded objects, and some exception handling code.
+
+To avoid this repetitive work and ease changes of common functions,
+the implementation C.cpp of the native functions declared in J.java
+are generated using create_impl.py, from a concise description of its
+signature plus the actual function body from C_impl.cpp.
+
+The specification of a function consists of two lines plus the body, e.g.:
+
+
+DEFINITION: Java_cvc3_ValidityChecker_jniRecordExpr4
+jobject m ValidityChecker vc nv string fields cv Expr exprs
+return embed_copy(env, vc->recordExpr(fields, exprs));
+
+
+Line 1 states that the definition of the function
+Java_cvc3_ValidityChecker_jniRecordExpr4
+follows.
+
+Line 2 states that its signature is:
+- returns a jobject
+- the 1. argument is a mutable ValidityChecker instance called vc:
+  ValidityChecker vc
+- the 2. argument is a string array called fields:
+  String[] fields
+- the 3. argument is an immutable Expr array called exprs:
+  const Expr[] fields
+
+Line 3 (and follows) contain the actual function body
+
+
+In general each argument is a triple consisting of:
+1. n: for a native type (int, boolean, String, ...)
+   m: for a mutable embedded type
+   c: for an immutable embedded type
+
+   In addition the suffix v declares it to be an array of the above
+   (vv and vvv are also possible)
+
+2. Type: the CVC type
+3. Name: any string
+
+
+
+The actual code generated for the above specification is:
+
+extern "C"
+JNIEXPORT jobject JNICALL Java_cvc3_ValidityChecker_jniRecordExpr4
+(JNIEnv* env, jclass, jobject jvc, jobjectArray jfields, jobjectArray jexprs)
+{
+  try {
+    ValidityChecker* vc = unembed_mut<ValidityChecker>(env, jvc);
+    vector<string> fields(toCppV(env, jfields));
+    vector<Expr> exprs(toCppV<Expr>(env, jexprs));
+    return embed_copy(env, vc->recordExpr(fields, exprs));
+  } catch (const Exception& e) { toJava(env, e); };
+}
+
+
+unembed, embed, and toJava are mapping functions (see 4.5. Data Conversions)
+
+
+
+5 Status
+--------
+
+5.1 ToDo
+--------
+
+The Makefile does its job reasonably well, but it:
+- should be able to automatically figure out some variables
+- should be smarter about what to redo after changes
+- should be possible to switch between debug and optimized builds
+  without a clean all
+- the different projects should be separated more cleanly
+
+Only classes and methods needed for the cvc3.jar and cvc3test.jar are currently
+exported, many methods which are probably going to be needed in applications
+are missing.
+
+Sometimes assert is used in the mapping layer. This should be replaced by
+DebugAssert, so that the exception is forwarded to the Java wrapper
+instead of crashing the whole program.
+
+
+5.2 Testing
+-----------
+
+Pentium M, Ubuntu 7.10, g++ 4.1.3, jdk 1.6.0_03:
+Passes cvc3test.jar and CVC3's benchmarks with 5s timeout in optimized + debug
+
+Pentium(R) 4 hyperthreaded, RHEL WS 4, g++ 3.4.6 20060404, jdk 1.5.0_06 1.6.0_03
+Passes cvc3test.jar and CVC3's benchmarks with 5s timeout in optimized + debug
+Passes smtlib in debug with 1s timeout
+
+XEON 4, RHEL WS 3, g++ 4.2.2, 1.4.2_12 1.6.0_03
+Passes cvc3test.jar and CVC3's benchmarks with 5s timeout in optimized + debug
+Passes smtlib in optimized with 1s timeout
+
+At least I think they pass, I think all the remaining crashes are due to the
+timeout problem described in 5.3 Problems.
+
+
+5.3 Problems
+------------
+
+A timeout in cvc3.jar can trigger a segfault (this wasn't counted as a fault
+in 5.2 Testing). This seems to happen from time to time in debug mode,
+rarer in optimized.
+My guess is that it is due to calling System.exit in a thread different from
+the main thread.
+
+
+For some reason the stack size is a problem, it sometimes needs to be a lot
+higher in the Java integration than it needs to be for the pure C++ program
+(I had the same problem with the C# port).
+
+It can be changed by using Java with the option
+  -Xss10M
+(e.g. needed for QF_IDL/mathsat/post_office/PO2-8-PO2.smt)
+Sometimes even 100M might be needed - something must go seriously wrong here.
+
+The option
+  -XX:StackShadowPages
+is also supposed to help, but it didn't in my tests.
+
+see: http://java.sun.com/javase/6/webnotes/trouble/TSG-VM/html/gbyzx.html
+
+
+Debugging can be tricky, as one needs a debugger for the Java bytecode,
+and another debugger for the C++ object code.
+I tried only jswat on the Java side, and the only debugger that worked for me
+on the C++ side was zero (i.e. does not crash, break points and stepping works).
+
+The steps to take are:
+0. To make the program stop, enable the wait-for-keypress code in Embedded.java
+
+1. Start the jvm, make it listen for a debugger, and suspend it:
+
+java -Xmx400m -Xms400m -Xdebug -Xnoagent -Djava.compiler=none \
+  -Xrunjdwp:transport=dt_socket,server=y,suspend=y \
+  -jar ... lib/cvc3.jar ...
+
+2. Attach jswat to it, set a break point, continue
+
+3. Now it hits the stop point activated in 0;
+   attach zero, set break point, continue
+
+Even when not caring about the Java part, just running zero on the Java program
+didn't work, steps 0, 1, and 3 were still necessary.
+
+see: http://www.ibm.com/developerworks/java/library/j-jnidebug/index.html
+     http://www.kineteksystems.com/white-papers/mixedjavaandc.html
+
+     
+6 Frequently Asked Questions
+----------------------------
+
+6.1 Why does my application segfault when calling into CVC3 library?
+--------------------------------------------------------------------
+
+Make sure that the version of libcvc3.so found at runtime has the same 
+"build type" as the Java interface. There are binary incompatabilities 
+between "debug" and "optimized" versions of the CVC3 library.
+The Java interface picks up the build type from ../Makefile.local.
+If CVC3 is re-configured with a new build type, the interface must be
+re-compiled (i.e., run "make clean" then "make" in the current directory).
+
+If the build types match, then the segfault is probably a bug.
+
+7 Reporting Bugs
+----------------
+
+Please report bugs via Bugzilla: http://cs.nyu.edu/acsys/bugs/

@@ -1,0 +1,3 @@
+Main-Class: cvc3/Test
+Class-Path: libcvc3-3.0.0.jar
+

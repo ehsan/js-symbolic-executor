@@ -1,0 +1,261 @@
+/*
+ * Copyright 2010 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+//
+// Overview
+//
+
+js-symbolic-executor is a symbolic executor for JavaScript. It makes use of the
+Closure Compiler to instrument JavaScript code so that running the code also
+gathers constraints that describe why the program took the particular path it
+did on that input. Then, js-symbolic-executor translates these constraints into
+a form that can be digested by CVC3, an SMT solver. CVC3 responds with a result
+that js-symbolic-executor uses to generate a new set of inputs that will cause
+the JavaScript program to exercise new paths. This can be repeated until all
+paths are explored, or until some given number of tests have been generated.
+
+Contents:
+
+  closure-compiler/ -- The Closure Compiler, with an additional compiler pass
+closure-compiler/src/com/google/javascript/jscomp/SymbolicExecutionInstrumentation.java
+which instruments JavaScript code for symbolic execution. (This pass has a JUnit
+test file in the parallel closure-compiler/test directory.)
+
+  cvc3/ -- CVC3, a constraint solver (a.k.a. a theorem prover)
+
+  js-symbolic-executor/build.xml -- An Ant build file
+
+  js-symbolic-executor/lib/ -- Rhino, Guava, and JUnit jar files
+
+  js-symbolic-executor/data/ -- Files defining the logic of JavaScript for CVC3,
+and a library of JavaScript functions which the instrumetation calls in to
+
+  js-symbolic-executor/src -- Source files for the symbolic executor
+
+  js-symbolic-executor/test/symbolicexecutor -- JUnit tests
+
+  js-symbolic-executor/test/data -- JavaScript files used as inputs to the JUnit
+tests
+
+
+//
+// Building js-symbolic-executor
+//
+
+In js-symbolic-executor/, there is an Ant file named build.xml. To use it,
+navigate to that directory and type the command
+  ant
+This will (a) build the Closure Compiler, (b) configure and build CVC3, (c)
+compile js-symbolic-executor. Each of these steps produces a jar file which is
+placed in js-symbolic-executor/lib
+
+The build process is not flawless at the moment. First, you may need to set the
+JAVA_HOME environment variable before invoking Ant so that CVC3 can find your
+JDK. For example,
+  JAVA_HOME=/path/to/your/jdk ant
+
+Also, CVC3 depends on the GNU Multiple Precision (GMP) library. If you do not
+have this and do not wish to install it, you can compile CVC3 to use native
+arithmetic by defining 'arith' to 'native':
+  ant -Darith=native
+
+If something goes wrong,
+  ant clean
+should delete all of the generated files under js-symbolic-executor. To also
+clean closure-compiler and cvc3, run
+  ant clean-all
+
+
+//
+// Running js-symbolic-executor
+//
+
+You can run the JUnit tests for js-symbolic-executor by invoking
+  ant test
+Currently, there are not many tests, and one of them fails.
+
+You may get UnsatisfiedLinkError exceptions when trying to run the tests. This
+is likely because the shared object files that CVC3 created when it was built
+are not found by the linker. Ant is able to tell the JVM where to find one of
+these files (libcvc3jni.so), but not the other. Two ways to fix this are:
+
+1. Make a link to cvc3/lib/libcvc3.so (or some variant thereof, depending on
+your link error) somewhere the linker looks by default, such as /usr/lib
+
+2. Set LD_LIBRARY_PATH to point to cvc3/lib:
+  LD_LIBRARY_PATH=../cvc3/lib ant test
+
+You can also invoke the symbolic executor directly using the compiled jar file:
+  java -jar lib/js-symbolic-executor.jar filename entryFunction numTests [args]
+This has the same caveats about link error as running ant test.
+
+Run the jar with no arguments for a bit more explanation.
+
+
+//
+// Notes
+//
+
+js-symbolic-executor is still a fledgling project. It has a large number of
+limitations, among them:
+- only primitive values are handled
+- string operations (aside from comparing for equality) are not supported
+- side-effects need to be isolated into standalone statements
+- only local variables are supported (no globals, scopes, or object properties)
+- the values CVC3 returns for potential new inputs are not always easy to decode
+into actual values
+
+Contributions to this project are more than welcome!
+
+Here's a (partial) TODO list, including both minor and major tasks.
+
+-0, Infinity: Not currently supported, but should be trivial to add
+
+Handling 'divergences': The paper 'Automated Whitebox Fuzz Testing'
+(http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.129.5914) describes a
+symbolic executor for x86 binaries. (This paper introduced the generational
+search strategy js-symbolic-executor uses.) It discusses keeping track of when
+the actual path taken by a generated input doesn't follow the expected path, a
+condition it calls 'divergence'. Tracking divergences would certainly be helpful
+in the long term, and it would be helpful in the short term to make it easier to
+find where the symbolic executor needs work.
+
+Extract vars to top of functions: Should be straightforward, and should simplify
+later implementation
+
+Side-effect extraction: The logical formulation of the constraints have no
+notion of mutable state, so side-effects have to be treated solely in JavaScript
+so that the constraints only involve expressions without side-effects
+
+Objects: Allowing objects involves modeling the heap. Not trivial, but it
+shouldn't be conceptually challenging---there are lots of examples out there to
+use as a starting point.
+
+(After objects, a few other things---such as arrays, the magical 'arguments'
+variable, and for-in loops---should be a bit more work, but not too much.)
+
+Type conversions: We may want (or need) to make explicit all of the implicit
+coercions between types. At the least, converting objects to primitives (calls
+to toString() or valueOf()) should be made explicit, as they could have
+side-effects.
+
+this: We have to handle the 'this' keyword. One approach might be to simply
+eliminate it altogether, as described in
+http://www.cs.brown.edu/~sk/Publications/Papers/Published/gsk-essence-javascript/
+
+new: 'new' is another keyword that we have to handle or eliminate
+
+Functions, closures, and scopes: This will involve, at the least, introducing a
+stack of environments in which to look up variables.
+
+Wrap global object: It might be nice to be able to completely isolate a program
+from its environment.
+
+Exceptions: I'm not exactly sure what handling exceptions will entail.
+
+String operations and regular expressions: Handling strings is
+complicated. There is lots of work in this area. Here are two pieces of work to
+consider:
+- http://webblaze.cs.berkeley.edu/2010/kaluza, a string solver used by
+another JavaScript symbolic execution project
+- http://research.microsoft.com/apps/pubs/default.aspx?id=117753, which
+describes modeling regular expression with an SMT solver
+
+Floating point: JavaScript number are all 64-bit floating point number, but they
+are currently modeled as unbounded integers.
+
+Built-in functions: There are many functions that are specified by the ECMA-262
+standard. These will have to be defined somewhere, either in JavaScript or in
+the logical description of the language.
+
+Dealing with the DOM: In the far future, we might think about how to handle this
+
+
+//
+// Licensing
+//
+
+
+-----
+Code in:
+js-symbolic-executor/lib/js.jar
+
+Rhino
+URL: http://www.mozilla.org/rhino
+Version:  1.7R2
+License:  Mozilla Public License and MPL / GPL dual license
+
+Description: An implementation of JavaScript for the JVM.
+
+Local Modifications: None.
+
+
+-----
+Code in:
+js-symbolic-executor/lib/guava-r06.jar
+
+Guava Libraries
+URL: http://code.google.com/p/guava-libraries/
+Version:  R6
+License: Apache License 2.0
+
+Description: Google's core Java libraries.
+
+Local Modifications: None.
+
+
+----
+Code in:
+js-symbolic-executor/lib/junit-4.8.2.jar
+
+JUnit
+URL:  http://junit.sourceforge.net
+Version:  4.8.2
+License:  Common Public License 1.0
+
+Description: A framework for writing and running automated tests in Java.
+
+Local Modifications: None.
+
+
+----
+Code under:
+cvc3/
+
+CVC3
+URL:  http://www.cs.nyu.edu/acsys/cvc3
+Version:  2010-09-02
+License:  See cvc3/LICENSE.in
+
+Description: An automatic theorem prover for Satisfiability Modulo Theories
+(SMT) problems.
+
+Local Modifications: None.
+
+
+----
+Code under:
+closure-compiler/
+
+Closure Compiler
+URL:  http://code.google.com/closure/compiler
+Version: r396
+License:  Apache License 2.0
+
+Description: A compiler for JavaScript
+
+Local Modifications: There is an additional compiler pass which instruments code
+to enable symbolic execution.
