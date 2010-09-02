@@ -1,0 +1,180 @@
+##################################################
+# Project-specific Makefile for including in each
+# module
+##################################################
+
+#Inputs: MODULE, SRC, HEADERS, EXECUTABLE/LIBRARY
+#Optional inputs: CXXFLAGS, INCLUDE_DIR, LD_LIB_DIR, LD_LIBS, EXE_DIR
+
+##################################################
+# Configuration options
+##################################################
+
+#Whether to build static libraries and executable
+STATIC = @STATIC@
+
+#Whether to optimize
+OPTIMIZED = @OPTIMIZED@
+
+#Whether to build for gcov
+GCOV = @GCOV@
+
+#Whether to build for gprof
+GPROF = @GPROF@
+
+empty:=
+space:= $(empty) $(empty)
+path_escape = $(subst $(space),\$(space),$(1))
+
+#Path to top directory
+ifndef TOP
+  TOP = $(call path_escape,@TOP@)
+endif
+
+#CXX
+CXX = @CXX@
+
+#LD
+LD = @LD@
+
+#AR
+AR = @AR@
+
+#CXXFLAGS
+CXXFLAGS := @CXXFLAGS@
+
+#CPPFLAGS
+CPPFLAGS := @CPPFLAGS@
+
+#LDFLAGS
+LDFLAGS = @LDFLAGS@
+
+#LIBS
+LD_LIBS += @LIBS@
+
+#Whether to build individual shared libraries
+BUILD_SHARED_LIB = @BUILD_SHARED_LIB@
+
+LIB_MAJOR_VERSION= @LIB_MAJOR_VERSION@
+LIB_MINOR_VERSION= @LIB_MINOR_VERSION@
+LIB_TEENY_VERSION= @LIB_TEENY_VERSION@
+LIB_COMPAT_VERSION= $(LIB_MAJOR_VERSION).$(LIB_MINOR_VERSION)
+LIB_VERSION= $(LIB_COMPAT_VERSION).$(LIB_TEENY_VERSION)
+
+#Whether to build the Java interface
+BUILD_JAVA = @BUILD_JAVA@
+
+# Java compilers and compiler flags
+JAVAC    = @JAVAC@
+JAVAH    = @JAVAH@
+JAR      = @JAR@
+JAVA     = @JAVA@
+JFLAGS   := @JFLAGS@
+JREFLAGS := @JREFLAGS@ 
+JAVA_INCLUDES  = @JAVA_INCLUDES@
+PYTHON   = @PYTHON@
+
+#Installation directories
+datarootdir = @datarootdir@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+bindir=@bindir@
+mandir=@mandir@
+incdir=$(prefix)/include/$(PROJECTNAME)
+javadir=@javadir@
+
+##################################################
+# Platform-specific definitions
+##################################################
+
+HOST_OS = @host_os@
+HOST_CPU = @host_cpu@
+EXEEXT=@EXEEXT@
+
+#Name of platform
+ifndef PLATFORM
+  PLATFORM := $(HOST_CPU)-$(HOST_OS)
+endif
+
+#Install
+INSTALL = @INSTALL@
+INSTALL_FLAGS = @INSTALL_FLAGS@
+
+#Shared/Static libraries
+SHARED = @SHARED@
+STATIC_FLAG = @STATIC_FLAG@
+DYNAMIC_FLAG = @DYNAMIC_FLAG@
+STATIC_LIB_SUFFIX = @STATIC_LIB_SUFFIX@
+SHARED_LIB_SUFFIX = @SHARED_LIB_SUFFIX@
+LDCONFIG = @LDCONFIG@
+
+ifeq ($(patsubst darwin%,,$(HOST_OS)),)
+  MAC_OSX = 1
+endif
+ 
+ifeq ($(patsubst cygwin%,,$(HOST_OS)),)
+  CYGWIN = 1
+endif
+ 
+ifeq ($(STATIC),0)
+ifeq ($(CYGWIN),)
+  CXXFLAGS += -fPIC
+endif
+endif
+
+#Etags/Ebrowse
+ETAGS=@ETAGS@
+EBROWSE=@EBROWSE@
+
+#lex
+LEX = flex
+LFLAGS = # -i  use this for a case-insensitive scanner
+
+#yacc
+YACC = bison
+YFLAGS = -d -y
+
+ifneq ($(CYGWIN),)
+ifeq ($(STATIC),)
+LIB_PREFIX = cyg
+else
+LIB_PREFIX = lib
+endif
+else
+LIB_PREFIX = lib
+endif
+
+##################################################
+# Project-specific definitions
+##################################################
+
+#Name of project library
+PROJECTNAME = cvc3
+
+#Main library name
+LIB_BASE_NAME = $(LIB_PREFIX)$(PROJECTNAME)
+
+#Where to look for include files
+INCLUDE_DIR += -I. -I$(TOP)/src/include
+
+#Where to look for lib files
+LD_LIB_DIR = @LD_LIB_DIR@ -L$(LIB_DIR)
+
+VERSION = @VERSION@
+WEBDIR = /usr/httpd/htdocs_cs/acsys/cvc3
+
+RATIONAL_FLAGS = @RATIONAL_IMPL@
+ifeq ($(RATIONAL_FLAGS),-DRATIONAL_NATIVE)
+  PLATFORM := $(PLATFORM)-native-arith
+endif
+
+DPLL_BASIC = @DPLL_BASIC@
+EXTRA_SAT_CPP = @EXTRA_SAT_CPP@
+EXTRA_SAT_HEADERS = @EXTRA_SAT_HEADERS@
+
+##################################################
+# Include generic Makefile
+##################################################
+
+include $(TOP)/Makefile.std

@@ -1,0 +1,2141 @@
+/*!
+
+\page user_doc The CVC3 User's Manual
+
+<!--<b>Note:</b> This user manual is still under construction.  Some newer features of CVC3 are not yet documented here.  Please let us know if you have a question
+that is not answered here.-->
+
+<strong>Contents</strong>
+
+<ul>
+<li>\ref user_doc_what_is_cvc3</li>
+<li>\ref user_doc_command_line</li>
+<li>\ref user_doc_pres_lang
+   <ul>
+   <li>\ref user_doc_pres_lang_types</li>
+       <ul>
+       <li>\ref user_doc_pres_lang_real_type</li>
+       <li>\ref user_doc_pres_lang_bitvec_types</li>
+       <li>\ref user_doc_pres_lang_unint_types</li>
+       <li>\ref user_doc_pres_lang_bool_type</li>
+       <li>\ref user_doc_pres_lang_fun_types</li>
+       <li>\ref user_doc_pres_lang_array_types</li>
+       <li>\ref user_doc_pres_lang_tuple_types</li>
+       <li>\ref user_doc_pres_lang_record_types</li>
+       <li>\ref user_doc_pres_lang_data_types</li>
+       <li>\ref user_doc_pres_lang_typing</li>
+       </ul>
+   <li>\ref user_doc_pres_lang_expr
+       <ul>
+       <li>\ref user_doc_pres_lang_expr_logic</li>
+       <li>\ref user_doc_pres_lang_expr_unint</li>
+       <li>\ref user_doc_pres_lang_expr_arith</li>
+       <li>\ref user_doc_pres_lang_expr_bit</li>	
+       <li>\ref user_doc_pres_lang_expr_arr</li>
+       <li>\ref user_doc_pres_lang_expr_dat</li>
+       <li>\ref user_doc_pres_lang_expr_rec_tup</li>
+       </ul>
+   </li>
+   <li>\ref user_doc_pres_lang_commands</li>
+       <ul>
+       <li>\ref user_doc_pres_lang_commands_query</li>
+       <li>\ref user_doc_pres_lang_commands_checksat</li>
+       <li>\ref user_doc_pres_lang_commands_restart</li>
+       </ul>
+   <li>\ref user_doc_pres_lang_patterns</li>
+   <li>\ref user_doc_pres_lang_subtypes
+       <ul>
+       <li>\ref user_doc_pres_lang_subtyping</li>
+       <li>\ref user_doc_pres_lang_tccs</li>
+       </ul>
+   </li>
+   </ul>
+</li>
+<li>\ref user_doc_smtlib_lang</li>
+</ul>
+
+\section user_doc_what_is_cvc3 What is CVC3?
+
+CVC3 is an automated <em>validity checker</em> for a many-sorted (i.e., typed)
+first-order logic with <em>built-in theories</em>, 
+including some support for quantifiers, 
+partial functions, and predicate subtypes.  
+The current built-in theories are the theories of:
+<ul>
+<li>
+equality over <em>free</em> (aka <em>uninterpreted</em>) function and predicate symbols, 
+</li>
+<li>
+real and integer linear arithmetic 
+(with some support for non-linear arithmetic),
+</li>
+<li>
+bit vectors,
+</li>
+<li>
+arrays, 
+</li>
+<li>
+tuples,
+</li>
+<li>
+records, 
+</li>
+<li>
+user-defined inductive datatypes.
+</li>
+</ul>
+
+CVC3 checks whether a given formula \f$\phi\f$ is valid in 
+the built-in theories under a given set \f$\Gamma\f$ of assumptions.
+More precisely, it checks whether 
+\f[\Gamma\models_T \phi\f] 
+that is,
+whether \f$\phi\f$ is a logical consequence of the union \f$T\f$ of 
+the built-in theories and the set of formulas \f$\Gamma\f$.
+
+Roughly speaking,
+when \f$\phi\f$ is <em>universal</em> and all the formulas in \f$\Gamma\f$ 
+are <em>existential</em>
+(i.e., when \f$\phi\f$ and \f$\Gamma\f$ contain at most universal, 
+respectively existential, quantifiers),
+CVC3 is in fact a decision procedure: 
+it is always guaranteed (well, modulo bugs and memory limits) to return a correct "valid" or 
+"invalid" answer. 
+In all other cases, CVC3 is sound but incomplete: 
+it will never say that an invalid formula is valid
+but it may either never return or give up and return "unknown" 
+in some cases when \f$\Gamma \models_T \phi\f$.
+
+
+When CVC3 returns "valid" it can return a formal proof of the validity 
+of \f$\phi\f$ under the <em>logical context</em> \f$\Gamma\f$,
+together with the subset \f$\Gamma'\f$ of \f$\Gamma\f$ used
+in the proof, such that \f$\Gamma'\models_T \phi\f$.  
+
+When CVC3 returns "invalid" it can return, in the current terminology, 
+both a <em>counter-example</em> to \f$\phi\f$'s validity under \f$\Gamma\f$
+and a <em>counter-model</em>.
+Both a counter-example and a counter-models are a set \f$\Delta\f$ of  
+additional formulas consistent with \f$\Gamma\f$ in \f$T\f$, 
+but entailing the negation of \f$\phi\f$.
+In formulas:
+<center>
+\f$\Gamma \cup \Delta \not\models_T \mathit{false}\f$
+and
+\f$\Gamma \cup \Delta \models_T \lnot \phi\f$.
+</center>
+
+The difference is that a counter-model is given as a set of equations
+providing a concrete assignment of values for the free symbols in 
+\f$\Gamma\f$ and \f$\phi\f$ 
+(see \ref user_doc_pres_lang_commands_query for more details).
+
+CVC3 can be used in two modes: as a library
+or as a command-line executable (implemented as a command-line interface to
+the library).
+Interfaces to the library are available in C/C++, Java and .NET.
+This manual mainly describes the command-line interface on a unix-type platform. 
+
+
+\section user_doc_command_line Running CVC3 from a Command Line
+
+Assuming you have properly installed CVC3 on your machine
+(check the \ref INSTALL section for that),
+you will have an executable file called <tt>cvc3</tt>.  
+It reads the input (a sequence
+of commands) from the standard input and prints the results on the standard
+output.  Errors and some other messages (e.g. debugging traces) are
+printed on the standard error.
+
+Typically, the input to <tt>cvc3</tt> is saved in a file and
+redirected to the executable, or given on a command line:
+
+\verbatim
+# Reading from standard input:
+  cvc3 < input-file.cvc
+# Reading directly from file:
+  cvc3 input-file.cvc
+\endverbatim
+
+Notice that, for efficiency, CVC3 uses input buffers, and the
+input is not always processed immediately after each command.
+Therefore, if you want to type the commands interactively and receive
+immediate feedback, use the <tt>+interactive</tt> option (can be
+shortened to <tt>+int</tt>):
+
+\verbatim
+  cvc3 +int
+\endverbatim
+
+Run <tt>cvc3 -h</tt> for more information on the available options.
+
+The command line front-end of CVC3 supports two input languages.
+<ul>
+<li>
+CVC3's own <em>presentation language</em>
+whose syntax was initially inspired by the PVS and SAL systems
+and is almost identical to the input language of CVC and CVC Lite, the
+predecessors of CVC3;
+</li>
+<li>
+the standard language promoted by the 
+<a href="http://www.SMT-LIB.org">SMT-LIB initiative</a> for SMT-LIB benchmarks.
+</li>
+</ul>
+
+We describe the input languages next, concentrating mostly on the first.
+
+
+\section user_doc_pres_lang Presentation Input Language
+
+The input language consists of a sequence of symbol declarations and commands,
+each followed by a semicolon (<tt>;</tt>).
+
+Any text after the first occurrence of a percent character 
+and to the end of the current line is a comment:
+
+\verbatim
+%%% This is a CVC3 comment
+\endverbatim
+
+
+\subsection user_doc_pres_lang_types Type system
+
+CVC3's type system includes a set of built-in types which can be expanded
+with additional user-defined types.
+
+The type system consists of 
+<em>value</em> types, <em>non-value</em> types and <em>subtypes</em> of value types,
+all of which are interpreted as sets.
+For convenience,
+we will sometimes identify below the interpretation of a type with the type itself.
+
+
+
+Value types consist of <em>atomic</em> types and <em>structured</em> types.
+The atomic types are 
+\f$\mathrm{REAL}\f$, 
+\f$\mathrm{BITVECTOR}(n)\f$ for all \f$n > 0\f$,
+as well as 
+user-defined atomic types (also called <em>uninterpreted</em> types).
+The structured types are 
+<em>array</em>,
+<em>tuple</em>, and
+<em>record</em> types, 
+as well as 
+ML-style user-defined (inductive) <em>datatypes</em>.
+
+Non-value types consist of the type \f$\mathrm{BOOLEAN}\f$ and
+<em>function</em> types.  Subtypes include the built-in subtype
+\f$\mathrm{INT}\f$ of \f$\mathrm{REAL}\f$ and are covered in the \ref
+user_doc_pres_lang_subtypes section below.
+
+
+\subsubsection user_doc_pres_lang_real_type REAL Type
+
+The \f$\mathrm{REAL}\f$ type is interpreted as the set of rational numbers.
+The name \f$\mathrm{REAL}\f$ is justified by the fact that a CVC3 formula is valid in 
+the theory of rational numbers iff it is valid in the theory of real numbers.
+
+
+\subsubsection user_doc_pres_lang_bitvec_types Bit Vector Types
+
+For every positive numeral <i>n</i>, the type \f$\mathrm{BITVECTOR}(n)\f$ is interpreted 
+as the set of all bit vectors of size <i>n</i>.
+
+
+\subsubsection user_doc_pres_lang_unint_types User-defined Atomic Types
+
+User-defined atomic types are each interpreted as a set of unspecified cardinality
+but disjoint from any other type.
+They are created by declarations like the following:
+
+\verbatim
+% User declarations of atomic types:
+
+MyBrandNewType: TYPE;
+
+Apples, Oranges: TYPE;
+\endverbatim
+
+
+\subsubsection user_doc_pres_lang_bool_type BOOLEAN Type
+
+The \f$\mathrm{BOOLEAN}\f$ type is, perhaps confusingly, the type of CVC3 formulas,
+not the two-element set of Boolean values.
+The fact that \f$\mathrm{BOOLEAN}\f$ is not a value type
+in practice means that it is not possible  
+for function symbols in CVC3 to have a arguments of type \f$\mathrm{BOOLEAN}\f$.
+The reason is that
+CVC3 follows the two-tiered structure of classical first-order logic 
+that distinguishes between formulas and terms, 
+and allows terms to occur in formulas but not vice versa.
+(An exception is the IF-THEN-ELSE construct, see later.)
+The only difference is that, syntactically, formulas in CVC3 are terms of 
+type \f$\mathrm{BOOLEAN}\f$.
+A function symbol <tt>f</tt> then <em>can</em> have \f$\mathrm{BOOLEAN}\f$ as 
+its return type.
+But that is just CVC3's way,
+inherited from the previous systems of the CVC family,
+to say that <tt>f</tt> is a predicate symbol.
+
+<!--
+CT: next line slightly reworded: 
+-->
+CVC3 does have a type that behaves like a Boolean Value type,
+that is, a value type with only two elements
+and with the usual Boolean operations defined on it:
+it is <tt>BITVECTOR(1)</tt>.
+
+
+\subsubsection user_doc_pres_lang_fun_types Function Types
+
+All structured types are actually <em>families</em> of types.
+Function (\f$\to\f$) types are created by the mixfix type constructors
+
+\f[
+\begin{array}{l}
+\_ \to \_
+\\[1ex]
+(\ \_\ ,\ \_\ ) \to \_ 
+\\[1ex]
+(\ \_\ ,\ \_\ ,\ \_\ ) \to \_ 
+\\[1ex]
+\ldots
+\end{array}
+\f]
+
+whose arguments can be instantiated by any value (sub)type,
+with the addition that the last argument can also be \f$\mathrm{BOOLEAN}\f$.
+
+\verbatim
+% Function type declarations
+
+UnaryFunType: TYPE = INT -> REAL;
+BinaryFunType: TYPE = (REAL, REAL) -> ARRAY REAL OF REAL;
+TernaryFunType: TYPE = (REAL, BITVECTOR(4), INT) -> BOOLEAN;
+\endverbatim
+
+A function type of the form \f$(T_1, \ldots, T_n) \to T\f$ with \f$n > 0\f$ is interpreted
+as the set of all total functions 
+from the Cartesian product \f$T_1 \times \cdots \times T_n\f$ to \f$T\f$
+when \f$T\f$ is not \f$\mathrm{BOOLEAN}\f$.
+Otherwise,
+it is interpreted as the set of all relations over \f$T_1 \times \cdots \times T_n\f$
+
+The example above also shows how to introduce <em>type names</em>.
+A name like <tt>UnaryFunType</tt> above is just an abbreviation 
+for the type \f$\mathrm{INT} \to \mathrm{REAL}\f$ and can be used interchangeably with it.
+
+<br>
+In general, any type defined by a type expression <tt>E</tt> can be given a name
+with the declaration:
+
+\verbatim
+name : TYPE = E;
+\endverbatim
+
+
+\subsubsection user_doc_pres_lang_array_types Array Types
+
+Array types are created by the mixfix type constructors
+\f$\mathrm{ARRAY}\ \_\ \mathrm{OF}\ \_\f$
+whose arguments can be instantiated by any value type.
+
+\verbatim
+T1 : TYPE;
+
+% Array types:
+
+ArrayType1: TYPE = ARRAY T1 OF REAL;
+ArrayType2: TYPE = ARRAY INT OF (ARRAY INT OF REAL);
+ArrayType3: TYPE = ARRAY [INT, INT] OF INT;
+\endverbatim
+
+An array type of the form \f$\mathrm{ARRAY}\ T_1\ \mathrm{OF}\ T_2\f$ is interpreted
+as the set of all total maps from \f$T_1\f$ to \f$T_2\f$.
+The main conceptual difference with the type \f$T_1 \to T_2\f$ is that 
+arrays, contrary to functions, are first-class objects of the language:
+they can be arguments or results of functions. 
+Moreover, array types come equipped with an update operation.
+
+
+\subsubsection user_doc_pres_lang_tuple_types Tuple Types
+
+Tuple types are created by the mixfix type constructors
+
+\f[
+\begin{array}{l}
+[\ \_\ ]
+\\[1ex]
+[\ \_\ ,\ \_\ ]
+\\[1ex]
+[\ \_\ ,\ \_\ \ ,\ \_\ ]
+\\[1ex]
+\ldots
+\end{array}
+\f]
+
+whose arguments can be instantiated by any value type.
+
+\verbatim
+% Tuple declaration
+
+TupleType: TYPE = [ REAL, ArrayType1, [INT, INT] ];
+
+\endverbatim
+
+A tuple type of the form \f$[T_1, \ldots, T_n]\f$ is interpreted
+as the Cartesian product \f$T_1 \times \cdots \times T_n\f$.
+Note that while the types \f$(T_1, \ldots, T_n) \to T\f$ and 
+\f$[T_1 \times \cdots \times T_n] \to T\f$ are semantically equivalent,
+they are operationally different in CVC3.
+The first is the type of functions that take <em>n</em> arguments,
+while the second is the type of functions of <em>1</em> argument of type n-tuple.
+
+
+\subsubsection user_doc_pres_lang_record_types Record Types
+
+Similar to, but more general than tuple types, 
+record types are created by type constructors of the form 
+
+\f[
+[\#\ l_1: \_\ ,\ \ldots\ ,\ l_n: \_\ \#]
+\f]
+
+where \f$n > 0\f$, 
+\f$l_1,\ldots, l_n\f$ are field labels,
+and
+the arguments can be instantiated with any value types.
+
+\verbatim
+% Record declaration
+
+RecordType: TYPE = [# number: INT, value: REAL, info: TupleType #];
+\endverbatim
+
+The order of the fields in a record type is meaningful.
+In other words, permuting the field names gives a different type.
+Note that records are
+<!-- 
+CT: removed
+(at the moment) 
+-->
+non-recursive.
+For instance,
+it is not possible to declare a record type called <tt>Person</tt>
+containing a field of type <tt>Person</tt>.
+Recursive types are provided in CVC3 as ML-style datatypes.
+
+
+\subsubsection user_doc_pres_lang_data_types Inductive Data Types
+
+Inductive datatypes are created by declarations of the form
+
+\f[
+\begin{array}{l}
+\mathrm{DATATYPE} \\
+\ \ \mathit{type\_name}_1 = C_{1,1} \mid C_{1,2} \mid \cdots \mid C_{1,m_1}, \\
+\ \ \mathit{type\_name}_2 = C_{2,1} \mid C_{2,2} \mid \cdots \mid C_{2,m_2}, \\
+\ \ \vdots \\
+\ \ \mathit{type\_name}_n = C_{n,1} \mid C_{n,2} \mid \cdots \mid C_{n,m_n} \\
+\mathrm{END};
+\end{array}
+\f]
+
+Each of the \f$C_{ij}\f$ is either a constant symbol
+or an expression of the form
+
+\f[
+\mathit{cons}(\ \mathit{sel}_1: T_1,\ \ldots,\ \mathit{sel}_k: T_k\ )
+\f]
+
+where \f$T_1, \ldots, T_k\f$ are any value types or type names for value types, 
+including any \f$\mathit{type\_name}_i\f$.
+Such declarations introduce for the datatype:
+- <em>constructor</em> symbols \f$cons\f$ of type 
+  \f$(T_1, \ldots, T_k) \to \mathit{type\_name}_i\f$,
+- <em>selector</em> symbols \f$\mathit{sel}_j\f$ of type 
+  \f$\mathit{type\_name}_i \to T_j\f$,
+  and
+- <em>tester</em> symbols \f$\mathit{is\_cons}\f$ of type 
+  \f$\mathit{type\_name}_i \to \mathrm{BOOLEAN}\f$.
+
+Here are some examples of datatype declarations:
+
+\verbatim
+% simple enumeration type
+% implicitly defined are the testers: is_red, is_yellow and is_blue
+% (similarly for the other datatypes)
+
+DATATYPE
+  PrimaryColor = red | yellow | blue
+END;
+
+
+% infinite set of pairwise distinct values ...v(-1), v(0), v(1), ...
+
+DATATYPE
+  Id = v (id: INT)
+END;
+
+
+% ML-style integer lists
+
+DATATYPE
+  IntList = nil | cons (head: INT, tail: IntList)
+END;
+
+
+% ASTs
+
+DATATYPE
+  Term = var (index: INT)
+       | apply (arg_1: Term, arg_2: Term)
+       | lambda (arg: INT, body: Term)
+END;
+
+
+% Trees
+
+DATATYPE
+  Tree = tree (value: REAL, children: TreeList),
+  TreeList = nil_tl
+           | cons_tl (first_t1: Tree, rest_t1: TreeList)
+END;
+\endverbatim
+
+Constructor, selector and tester symbols defined for a datatype have global scope.
+So, for instance, it is not possible for two different datatypes to use 
+the same name for a constructor.
+
+A datatype is interpreted as a term algebra constructed by the constructor symbols
+over some sets of generators.
+For example, the datatype <tt>IntList</tt> is interpreted as the set of
+all terms constructed with <tt>nil</tt> and <tt>cons</tt> over the integers.
+
+Because of this semantics, CVC3 allows only <em>inductive</em> datatypes, that is, datatypes
+whose values are essentially (labeled, ordered) finite trees.
+Infinite structures such as streams or 
+even finite but cyclic ones such as circular lists are then excluded.
+For instance,
+none of the following declarations define inductive datatypes, 
+and are rejected by CVC3:
+
+\verbatim
+DATATYPE
+ IntStream = s (first:INT, rest: IntStream)
+END;
+
+DATATYPE
+ RationalTree = node1 (first_child1: RationalTree)
+              | node2 (first_child2: RationalTree, second_child2:RationalTree)
+END;
+
+DATATYPE
+ T1 =  c1 (s1: T2),
+ T2 =  c2 (s2: T1)
+END;
+\endverbatim
+
+In concrete, 
+a declaration of \f$n \geq 1\f$ datatypes \f$T_1, \ldots, T_n\f$ will be rejected
+if for any one of the types \f$T_1, \ldots, T_n\f$, it is impossible to build a
+finite term of that type using only the constructors of \f$T_1, \ldots, T_n\f$ and
+free constants of type other than \f$T_1, \ldots, T_n\f$.
+
+
+Datatypes are the only types for which 
+the user also chooses names for the built-in operations defined on the type for:
+- constructing a value (with the constructors), 
+- extracting components from a value (with the selectors),
+or 
+- checking if a value was constructed with a certain constructor or not
+(with the testers).
+
+For all the other types, 
+CVC3 provides predefined names 
+for the built-in operations on the type.
+
+
+\subsubsection user_doc_pres_lang_typing Type Checking
+
+In essence,
+CVC3 terms are statically typed at the level of types--as opposed to <em>sub</em>types--according to the usual rules of first-order many-sorted logic
+(the typing rules for formulas are analogous):
+
+- each variable has one associated (non-function) type,
+- each constant symbol has one associated (non-function) type,
+- each function symbol has one or more associated function types,
+- the type of a term consisting just of a variable or a constant symbol is 
+  the type associated to that variable or constant symbol,
+- the term obtained by applying 
+  a function symbol \f$f\f$ to the terms \f$t_1, \ldots, t_n\f$ is \f$T\f$ 
+  if \f$f\f$ has type \f$(T_1, \ldots, T_n) \to T\f$ and 
+  each \f$t_i\f$ has type \f$T_i\f$.
+
+Attempting to enter an ill-typed term will result in an error.
+
+The main difference with standard many-sorted logic is that some built-in symbols
+are parametrically polymorphic.
+For instance the function symbol for extracting the element of any array
+has type \f$(\mathit{ARRAY}\ T_1\ \mathit{OF}\ T_2,\; T_1) \to T_2\f$ 
+for all types \f$T_1, T_2\f$ not containing function or predicate types.
+
+
+\subsection user_doc_pres_lang_expr Terms and Formulas
+
+In addition to type expressions, CVC3 has expressions
+for terms and formulas (i.e., terms of type \f$\mathrm{BOOLEAN}\f$).
+By and large, these are standard first-order terms
+built out of (typed) variables, 
+predefined theory-specific operators,
+free (i.e., user-defined) function symbols,
+and quantifiers.
+Extensions include an if-then-else operator,
+lambda abstractions, and local symbol declarations, 
+as illustrated below.
+Note that these extensions still keep CVC3's language first-order.
+In particular, lambda abstractions are restricted to take and return
+only terms of a value type.
+Similarly, quantifiers can only quantify variables of a value type.
+
+Free function symbols include <em>constant</em> symbols and
+<em>predicate</em> symbols,
+respectively nullary function symbols and 
+function symbols with a \f$\mathrm{BOOLEAN}\f$ return type.
+Free symbols are introduced with global declarations of the form 
+\f$f_1, \ldots, f_m: T;\f$
+where \f$m > 0\f$, 
+\f$f_i\f$ are the names of the symbols and \f$T\f$ is their type:
+
+\verbatim
+% integer constants
+
+a, b, c: INT;
+
+% real constants
+
+x,y,z: REAL;
+
+% unary function
+
+f1: REAL -> REAL;
+
+% binary function
+
+f2: (REAL, INT) -> REAL;
+
+% unary function with a tuple argument
+
+f3: [INT, REAL] -> BOOLEAN;
+
+% binary predicate
+
+p: (INT, REAL) -> BOOLEAN;
+
+% Propositional "variables"
+
+P,Q; BOOLEAN;
+\endverbatim
+
+Like type declarations, 
+such free symbol declarations have global scope and must be unique.
+In other words, it is not possible to globally declare a symbol more than once.
+This entails among other things that free symbols cannot be overloaded 
+with different types.
+
+As with types, a new free symbol can be defined as the name of a term
+of the corresponding type.
+With constant symbols this is done with a declaration of the form \f$f:T = t;\f$ :
+
+\verbatim
+c: INT;
+
+i: INT = 5 + 3*c;
+
+j: REAL = 3/4;
+
+t: [REAL, INT] = (2/3, -4);
+
+r: [# key: INT, value: REAL #] = (# key := 4, value := (c + 1)/2 #);
+
+f: BOOLEAN = FORALL (x:INT): x <= 0 OR x > c ;
+\endverbatim
+
+A restriction on constants of type \f$\mathit{BOOLEAN}\f$ is that
+their value can only be a <em>closed</em> formula, 
+that is, a formula with no free variables.
+
+A term and its name can be used interchangeably in later expressions.  
+Named terms are often useful for shared subterms 
+(terms used several times in different places) 
+since their use can make the input exponentially more concise.
+Named terms are processed very efficiently by CVC3.  
+It is much more efficient to associate a
+complex term with a name directly rather than 
+to declare a constant and later assert that it is equal to the same term.  
+This point will be explained in more detail later in
+section \ref user_doc_pres_lang_commands.
+
+
+More generally,
+in CVC3 one can associate a term to function symbols of any arity.
+For non-constant function symbols
+this is done with a declaration of the form 
+\f[
+f:(T_1, \ldots, T_n) \to T = \mathrm{LAMBDA}(x_1:T_1, \ldots, x:T_n): t\;;
+\f]
+where \f$t\f$ is any term of type \f$T\f$
+with free variables in \f$\{x_1, \ldots, x_n\}\f$.
+The lambda binder has the usual semantics and conforms to the usual lexical scoping rules:
+within the term \f$t\f$ the declaration of the symbols \f$x_1, \ldots, x_n\f$ 
+as local variables of respective type \f$T_1, \ldots, T_n\f$ hides 
+any previous, global declaration of those symbols.
+
+As a general shorthand,
+when \f$k\f$ consecutive types \f$T_i, \ldots, T_{i+k-1}\f$ 
+in the lambda expression \f$\mathrm{LAMBDA}(x_1:T_1, \ldots, x:T_n): t\f$ are identical,
+the syntax \f$\mathrm{LAMBDA}(x_1:T_1, \ldots, x_i,\ldots, x_{i+k-1}:T_i,\ldots, x:T_n): t\f$
+is also allowed.
+
+
+\verbatim
+% Global declaration of x as a unary function symbol
+
+x: REAL -> REAL;
+
+
+% Local declarations of x as a constant symbol
+
+f: REAL -> REAL = LAMBDA (x: REAL): 2*x + 3;
+
+p: (INT, INT) -> BOOLEAN = LAMBDA (x,i: INT): i*x - 1 > 0;
+
+g: (REAL, INT) -> [REAL, INT] = LAMBDA (x: REAL, i:INT): (x + 1, i - 3);
+\endverbatim
+
+
+
+Constant and function symbols can also be declared <em>locally</em> anywhere within a term 
+by means of a <em>let</em> binder.
+This is done with a declaration of the form 
+\f[
+\begin{array}{rl}
+\mathrm{LET} & f_1 = t_1, \\
+             & \vdots \\
+             & f_n = t_m \\ 
+\mathrm{IN} & t ;
+\end{array}
+\f]
+for constant symbols, and of the form
+\f[
+\begin{array}{rlcl}
+\mathrm{LET}
+ & f_1 & = &\mathrm{LAMBDA}(x^1_1:T^1_1, \ldots, x^{n_1}_1:T^{n_1}_1):\; t_1,
+ \\
+ & & \vdots &
+ \\
+ & f_m & = & \mathrm{LAMBDA}(x^1_m:T^1_m, \ldots, x^{n_m}_m:T^{n_m}_m):\; t_m
+ \\
+ \mathrm{IN} & t ;
+\end{array}
+\f]
+for non-constant symbols.
+Let binders can be nested arbitrarily
+and follow the usual lexical scoping rules.
+
+\verbatim
+t: REAL =
+  LET g = LAMBDA(x:INT): x + 1,
+      x1 = 42,
+      x2 = 2*x1 + 7/2
+  IN
+     (LET x3 = g(x1) IN x3 + x2) / x1;
+\endverbatim
+
+Note that the same symbol <tt>=</tt> is used, unambiguously, 
+in the syntax of global declarations,
+let declarations,
+and as a predicate symbol.
+
+In addition to user-defined symbols,
+CVC3 terms can use a number of predefined symbols:
+the logical symbols 
+as well as <em>theory</em> symbols,
+function symbols belonging to one of the built-in theories.
+They are described next, with the theory symbols grouped by theory.
+
+
+\subsubsection user_doc_pres_lang_expr_logic Logical Symbols
+
+The logical symbols in CVC3's language include 
+the equality and disequality predicate symbols,
+respectively written as <tt>=</tt> and <tt>/=</tt>,
+the multiarity disequality symbol <tt>DISTINCT</tt>,
+together with the logical constants <tt>TRUE</tt>, <tt>FALSE</tt>,
+the connectives <tt>NOT</tt>, <tt>AND</tt>, <tt>OR</tt>,
+<tt>XOR</tt>, <tt>=&gt;</tt>, <tt>&lt;=&gt;</tt>, 
+and the first-order quantifiers <tt>EXISTS</tt> and <tt>FORALL</tt>,
+all with the standard many-sorted logic semantics.
+
+The binary connectives have infix syntax and type
+\f$(\mathrm{BOOLEAN},\mathrm{BOOLEAN}) \to \mathrm{BOOLEAN}\f$.
+The symbols <tt>=</tt> and <tt>/=</tt>, which are also infix, are instead polymorphic,
+having type \f$(T,T) \to \mathrm{BOOLEAN}\f$
+for every predefined or user-defined value type \f$T\f$.
+They are interpreted respectively as the identity relation and its complement. 
+
+The \f$\mathrm{DISTINCT}\f$ symbol is both overloaded and polymorphic.
+It has type \f$(T,...,T) \to \mathrm{BOOLEAN}\f$
+for every tuple \f$(T,...,T)\f$ of length \f$n > 0\f$
+where \f$T\f$ is a predefined or user-defined value type.
+For each \f$n > 0\f$,  
+it is interpreteted as the relation that holds exactly
+for tuples of pairwise distinct elements.
+
+The syntax for quantifiers is similar to that of the lambda binder.
+
+Here is an example of a formula built just of these logical symbols and variables:
+
+\verbatim
+A, B: TYPE;
+
+quant: BOOLEAN = FORALL (x,y: A, i,j,k: B): i = j AND i /= k
+                   => EXISTS (z: A): x /= z OR z /= y;
+\endverbatim
+
+
+Binding and scoping of quantified variables follows the same rules as
+in let expressions. 
+In particular, a quantifier will shadow in its scope any constant and function symbols 
+with the same name as one of the variables it quantifies:
+
+\verbatim
+A: TYPE;
+i,j: INT;
+
+% The first occurrence of i and of j in f are constant symbols,
+% the others are variables.
+
+f: BOOLEAN =  i = j AND FORALL (i,j: A): i = j OR i /= j;
+\endverbatim
+
+Optionally, it is also possible to specify
+<em>instantiation patterns</em> for quantified variables.
+The general syntax for a quantified formula \f$\psi\f$ with patterns is 
+
+\f[
+ Q\:(x_1:T_1, \ldots, x_k:T_k):\; 
+ p_1: \ldots\; p_n:\;
+ \varphi
+\f]
+
+where 
+\f$n \geq 0\f$,
+\f$Q\f$ is either \f$\mathrm{FORALL}\f$ or \f$\mathrm{EXISTS}\f$,
+\f$\varphi\f$ is a term of type \f$\mathrm{BOOLEAN}\f$,
+and
+each of the \f$p_i\f$'s,
+a <em>pattern for the quantifier</em> \f$Q\:(x_1:T_1, \ldots, x_k:T_k)\f$,
+has the form
+\f[
+ \mathrm{PATTERN}\; (t_1, \ldots, t_m)
+\f]
+where
+\f$m > 0\f$
+and
+\f$t_1, \ldots, t_m\f$ are arbitrary binder-free terms (no lets, no quantifiers).
+Those terms can contain (free) variables,
+typically, but not exclusively, drawn from \f$x_1, \ldots, x_k\f$.
+(Additional variables can occur 
+if \f$\psi\f$ occurs in a bigger formula binding those variables.)
+
+\verbatim
+A: TYPE;
+b, c: A;
+p, q: A -> BOOLEAN;
+r: (A, A) -> BOOLEAN;
+
+ASSERT FORALL (x0, x1, x2: A):
+         PATTERN (r(x0, x1), r(x1, x2)): 
+         (r(x0, x1) AND r(x1, x2)) => r(x0, x2) ;
+
+ASSERT FORALL (x: A):
+         PATTERN (r(x, b)): 
+         PATTERN (r(x, c)): 
+         p(x) => q(x) ;
+
+ASSERT EXISTS (y: A):
+         FORALL (x: A):
+           PATTERN (r(x, y), p(y)): 
+           r(x, y) => q(x) ;
+\endverbatim
+
+Patterns have no logical meaning: adding them to a formula does not change its semantics.
+Their purpose is purely operational,
+as explained in Section \ref user_doc_pres_lang_patterns.
+
+
+In addition to these constructs,
+CVC3 also has a general mixfix conditional operator of the form
+\f[
+\mathrm{IF}\ b\ 
+\mathrm{THEN}\ t\ 
+\mathrm{ELSIF}\ b_1\ 
+\mathrm{THEN}\ t_1\ 
+\ldots\  
+\mathrm{ELSIF}\ b_n\
+\mathrm{THEN}\ t_n\ 
+\mathrm{ELSE}\ t_{n+1}\  
+\mathrm{ENDIF} 
+\f]
+with \f$n \geq 0\f$ 
+where \f$b, b_1, \ldots, b_n\f$ are terms of type \f$\mathrm{BOOLEAN}\f$
+and
+\f$t, t_1, \ldots, t_n, t_{n+1}\f$ are terms of the same value type \f$T\f$:
+
+\verbatim
+% Conditional term
+x,y,z,w:REAL;
+t: REAL = 
+  IF x > 0 THEN y
+  ELSIF x >= 1 THEN z
+  ELSIF x > 2 THEN w
+  ELSE 2/3 ENDIF;
+
+\endverbatim
+
+\subsubsection user_doc_pres_lang_expr_unint User-defined Functions and Types
+
+The theory of user-defined functions is in effect a family of theories
+of equality parametrized by the atomic types and the free symbols a user
+can define during a run of CVC3.
+<!--
+[CB: I think this is confusing--this is true for all theories]
+For each run, the theory's types consist of all the user-defined types 
+as well as all the predefined types from the other built-in theories.
+-->
+The theory's function symbols consist of all <em>and only</em> the user-defined free symbols.
+
+<!--
+[CB: No longer true]
+Note that this theory is stronger than the theory of equality over 
+the user-defined free symbols, because it also imposes cardinality constraints on
+all of its value types.
+Specifically,
+the \f$\mathrm{REAL}\f$ type and each user-defined atomic types are infinite;
+each bit vector type is finite;
+each array type is finite if both its index and element types are finite, and infinite otherwise;
+each inductive datatype (and similarly for tuple and record types) is finite or infinite 
+depending on whether it defines a finite or an infinite term algebra.
+-->
+
+\subsubsection user_doc_pres_lang_expr_arith Arithmetic
+
+The real arithmetic theory has predefined symbols for the usual arithmetic 
+constants and operators 
+over the type \f$\mathrm{REAL}\f$, each with the expected type:
+all numerals <tt>0</tt>, <tt>1</tt>, ...,
+as well as <tt>-</tt>
+(both unary and binary), <tt>+</tt>, <tt>*</tt>, <tt>/</tt>, <tt>&lt;</tt>,
+<tt>&gt;</tt>, <tt>&lt;=</tt>, <tt>&gt;=</tt>.
+Rational values can be expressed in fractional form: e.g., 1/2, 3/4, etc.
+
+The size of numerals used in the representation of natural and rational numbers is unbounded (or more accurately, bounded only by the amount of available memory).
+
+
+\subsubsection user_doc_pres_lang_expr_bit Bit vectors
+
+The bit vector theory has a large number of predefined function symbols
+denoting various bit vector operators.
+We describe the operators and their semantics informally below,
+often omitting a specification of their type, which should be easy to infer.
+
+The operators' names are overloaded in the obvious way.
+For instance, the same name is used for each \f$m,n > 0\f$ 
+for the operator that takes a bit vector of size \f$m\f$ and one of size \f$n\f$ and 
+returns their concatenation.
+
+For each size \f$n\f$,
+there are \f$2^n\f$ elements in the type \f$\mathrm{BITVECTOR}(n)\f$.  These
+elements can be named using constant symbols
+or <em>bit vector constants</em>.  Each element in the domain is named by two
+different constant symbols: once in binary and once in hexadecimal format. 
+Binary constant symbols start with the characters <tt>0bin</tt>
+and continue with the representation of the vector in the usual binary format
+(as an \f$n\f$-string over the characters 0,1).
+Hexadecimal constant symbols start with the characters <tt>0hex</tt>
+and continue with the representation of the vector in usual hexadecimal format
+(as an \f$n\f$-string over the characters 0,...,9,a,...,f).
+
+\verbatim 
+Binary constant          Corresponding hexadecimal constant
+-----------------------------------------------------------
+0bin0000111101010000     0hex0f50
+\endverbatim
+
+In the binary representation,
+the rightmost bit is the least significant bit (LSB) of the vector and 
+the leftmost bit is the most significant bit (MSB). 
+The index of the LSB in the bit vector is 0 and 
+the index of the MSB is n-1 for an n-bit constant. 
+This convention extends to all bit vector expressions in the natural way. 
+
+Bit vector operators are categorized into
+word-level, bitwise, arithmetic, and comparison operators.
+
+\verbatim
+WORD-LEVEL OPERATORS:
+
+Description       Symbol         Example
+================================================================
+Concatenation     _ @ _          0bin01@0bin0    (= 0bin010)
+Extraction        _ [i:j]        0bin0011[3:1]   (= 0bin001)
+Left shift        _ << k         0bin0011 << 3   (= 0bin0011000)
+Right shift       _ >> k         0bin1000 >> 3   (= 0bin0001)
+Sign extension    SX(_,k)        SX(0bin100, 5)  (= 0bin11100)
+\endverbatim
+
+
+For each \f$m,n > 0\f$ there is
+- 
+one infix concatenation operator,
+taking an \f$m\f$-bit vector \f$v_1\f$ and an \f$n\f$-bit vector \f$v_2\f$ and 
+returning the \f$(m+n)\f$-bit concatenation of \f$v_1\f$ and \f$v_2\f$;
+- 
+one postfix extraction operator \f$[i:j]\f$ for each \f$i, j\f$ with \f$n > i >= j >= 0\f$,
+taking an \f$n\f$-bit vector \f$v\f$ and 
+returning the \f$(i-j+1)\f$-bit subvector of \f$v\f$ at positions \f$i\f$
+through \f$j\f$ (inclusive);
+- 
+one postfix left shift operator \f$<< k\f$ for each \f$k >= 0\f$,
+taking an \f$n\f$-bit vector \f$v\f$ and 
+returning the \f$(n+k)\f$-bit concatenation of \f$v\f$ with the \f$k\f$-bit zero vector;
+- 
+one postfix right shift operator \f$>> k\f$ for each \f$k >= 0\f$,
+taking an \f$n\f$-bit vector \f$v\f$ and 
+returning the \f$n\f$-bit concatenation of the \f$k\f$-bit zero bit vector with \f$v[n-1:k]\f$;
+- 
+one mixfix sign extension operator \f$\mathrm{SX}(\_, k)\f$ for each \f$k >= n\f$,
+taking an \f$n\f$-bit vector \f$v\f$ and 
+returning the \f$k\f$-bit concatenation of \f$k-n\f$ copies of the MSB of \f$v\f$
+and \f$v\f$.
+
+
+\verbatim
+BITWISE OPERATORS:
+
+Description       Symbol
+==============================
+Bitwise AND       _ & _       
+Bitwise OR        _ | _       
+Bitwise NOT       ~ _         
+Bitwise XOR       BVXOR(_,_)  
+Bitwise NAND      BVNAND(_,_) 
+Bitwise NOR       BVNOR(_,_)  
+Bitwise XNOR      BVXNOR(_,_) 
+\endverbatim
+
+For each \f$n > 0\f$ there are operators with the names and syntax above,
+performing the usual bitwise Boolean operations from \f$n\f$-bit arguments
+to an \f$n\f$-bit result.
+
+
+\verbatim
+ARITHMETIC OPERATORS:
+
+Description               Symbol
+========================================
+Bit vector addition        BVPLUS(k,_,_,...)
+Bit vector multiplication  BVMULT(k,_,_) 
+Bit vector negation        BVUMINUS(_)
+Bit vector subtraction     BVSUB(k,_,_)
+\endverbatim
+
+
+For each \f$n > 0\f$ and \f$k > 0\f$ there is
+- 
+one addition operator \f$\mathrm{BVPLUS}(k,\_, \_, \ldots)\f$,
+taking two or more bit vectors of arbitrary size, and returning the \f$(k)\f$
+least significant bits of their sum.
+- 
+one multiplication operator \f$\mathrm{BVMULT}(k,\_, \_)\f$,
+taking two bit vectors \f$v_1\f$ and \f$v_2\f$, and 
+returning the \f$k\f$ least significant bits of their product.
+- 
+one prefix negation operator \f$\mathrm{BVUMINUS}(\_)\f$,
+taking an \f$n\f$-bit vector \f$v\f$ and 
+returning the \f$n\f$-bit vector \f$\mathrm{BVPLUS}(n,\verb|~|v,\mathrm{0bin1})\f$.
+- 
+one subtraction operator \f$\mathrm{BVSUB}(k,\_, \_)\f$,
+taking two bit vectors \f$v_1\f$ and \f$v_2\f$, and 
+returning the \f$k\f$-bit vector
+\f$\mathrm{BVPLUS}(k,v_1,\mathrm{BVUMINUS}(v'))\f$ where \f$v'\f$ is \f$v_2\f$
+if the size of \f$v_2\f$ is greater than or equal to \f$k\f$, and \f$v_2\f$
+extended to size \f$k\f$ by concatenating zeroes in the most significant bits otherwise.
+
+CVC3 does not have dedicated operators for multiplexers.
+However, specific multiplexers can be easily defined with the aid of conditional terms.
+
+\verbatim
+% Example of 2-to-1 multiplexer
+
+mp: (BITVECTOR(1), BITVECTOR(1), BITVECTOR(1)) -> BITVECTOR(1) =
+      LAMBDA (s,x,y : BITVECTOR(1)): IF s = 0bin0 THEN x ELSE y ENDIF;
+\endverbatim
+
+
+In addition to equality and disequality, CVC3 provides the following comparison operators.
+
+\verbatim
+COMPARISON OPERATORS:
+
+Description              Symbol
+===================================
+Less than                BVLT(_,_)
+Less than or equal to    BVLE(_,_)
+Greater than             BVGT(_,_)
+Greater than equal to    BVGE(_,_)
+\endverbatim
+
+For each \f$m, n > 0\f$ there is
+- 
+one prefix "less than" operator \f$\mathrm{BVLT}(\_, \_)\f$,
+taking an \f$m\f$-bit vector \f$v_1\f$ and an \f$n\f$-bit vector \f$v_2\f$, and 
+having the value \f$\mathrm{TRUE}\f$ iff the zero-extension of \f$v_1\f$ to \f$k\f$
+bits is less than the zero-extension of \f$v_2\f$ to \f$k\f$ bits, where
+\f$k\f$ is the maximum of \f$m\f$ and \f$n\f$.
+- 
+one prefix "less than or equal to" operator \f$\mathrm{BVLE}(\_, \_)\f$,
+taking an \f$m\f$-bit vector \f$v_1\f$ and an \f$n\f$-bit vector \f$v_2\f$, and 
+having the value \f$\mathrm{TRUE}\f$ iff the zero-extension of \f$v_1\f$ to \f$k\f$
+bits is less than or equal to the zero-extension of \f$v_2\f$ to \f$k\f$ bits, where
+\f$k\f$ is the maximum of \f$m\f$ and \f$n\f$.
+- 
+one prefix "greater than" operator \f$\mathrm{BVGT}(\_, \_)\f$,
+taking an \f$m\f$-bit vector \f$v_1\f$ and an \f$n\f$-bit vector \f$v_2\f$, and 
+having the same value as \f$\mathrm{BVLT}(v_2, v_1)\f$.
+- 
+one prefix "greater than or equal to" operator \f$\mathrm{BVGE}(\_, \_)\f$,
+taking an \f$m\f$-bit vector \f$v_1\f$ and an \f$n\f$-bit vector \f$v_2\f$, and 
+having the same value as \f$\mathrm{BVLE}(v_2, v_1)\f$.
+
+Following are some example CVC3 input formulas involving bit vector expressions
+
+Example 1 illustrates the use of arithmetic, word-level and bitwise NOT operations:
+
+\verbatim
+x : BITVECTOR(5);
+y : BITVECTOR(4);
+yy : BITVECTOR(3);
+
+QUERY
+ BVPLUS(9, x@0bin0000, (0bin000@(~y)@0bin11))[8:4] = BVPLUS(5, x, ~(y[3:2])) ;
+\endverbatim
+
+Example 2 illustrates the use of arithmetic, word-level and multiplexer terms:
+
+\verbatim
+bv : BITVECTOR(10);
+a : BOOLEAN;
+
+QUERY
+ 0bin01100000[5:3]=(0bin1111001@bv[0:0])[4:2] 
+ AND 
+ 0bin1@(IF a THEN 0bin0 ELSE 0bin1 ENDIF) = (IF a THEN 0bin110 ELSE 0bin011 ENDIF)[1:0] ;
+\endverbatim
+
+Example 3 illustrates the use of bitwise operations:
+
+\verbatim
+x, y, z, t, q : BITVECTOR(1024);
+
+ASSERT x = ~x;
+ASSERT x&y&t&z&q = x;
+ASSERT x|y = t;
+ASSERT BVXOR(x,~x) = t;
+QUERY  FALSE;
+\endverbatim
+
+Example 4 illustrates the use of predicates and all the arithmetic operations:
+
+\verbatim
+x, y : BITVECTOR(4);
+
+ASSERT x = 0hex5;
+ASSERT y = 0bin0101;
+
+QUERY
+ BVMULT(8,x,y)=BVMULT(8,y,x)
+ AND
+ NOT(BVLT(x,y))
+ AND
+ BVLE(BVSUB(8,x,y), BVPLUS(8, x, BVUMINUS(x))) 
+ AND 
+ x = BVSUB(4, BVUMINUS(x), BVPLUS(4, x,0hex1)) ;
+\endverbatim
+
+Example 5 illustrates the use of shift functions
+
+\verbatim
+x, y : BITVECTOR(8);
+z, t : BITVECTOR(12);
+
+ASSERT x = 0hexff;
+ASSERT z = 0hexff0;
+QUERY  z = x << 4;
+QUERY (z >> 4)[7:0] = x;
+\endverbatim
+
+
+\subsubsection user_doc_pres_lang_expr_arr Arrays
+
+The theory of arrays is a parametric theory of (total) unary functions.
+It comes equipped with polymorphic selection and update operators,
+respectively
+<center>
+\f$\_[\_]\f$ and \f$\_\ \mathrm{WITH}\ [\_]\ := \_\f$
+</center>
+with the usual semantics.
+For each <em>index</em> type \f$T_1\f$ and <em>element</em> type \f$T_2\f$,
+the first operator maps an array from \f$T_1\f$ to \f$T_2\f$
+and an index into it (i.e., a value of type \f$T_1\f$)
+to the element of type \f$T_2\f$ "stored" into the array at that index.
+The second maps an array \f$a\f$ from \f$T_1\f$ to \f$T_2\f$, 
+an index \f$i\f$, 
+and a \f$T_2\f$-element \f$e\f$ to the array 
+that stores \f$e\f$ at index \f$i\f$ and is otherwise identical to \f$a\f$.
+
+Since arrays are just maps, equality between them is <em>extensional</em>:
+for two arrays of the same type to be different 
+they have to store differ elements in at least one place.
+
+Sequential updates can be chained with the syntax
+\f$\_\ \mathrm{WITH}\ [\_]\ := \_, \ldots, [\_]\ := \_\f$.
+
+\verbatim
+A: TYPE = ARRAY INT OF REAL;
+a: A;
+i: INT = 4;
+
+% selection:
+
+
+elem: REAL = a[i];
+
+% update
+
+a1: A = a WITH [10] := 1/2;
+
+% sequential update 
+% (syntactic sugar for (a WITH [10] := 2/3) WITH [42] := 3/2)
+
+a2: A = a WITH [10] := 2/3, [42] := 3/2;
+\endverbatim
+
+<!--
+We decided not to mention array initialization.
+This will remain for now an undocumented feature of the theory.
+-->
+
+
+\subsubsection user_doc_pres_lang_expr_dat Datatypes
+
+The theory of datatypes is in fact a <em>family</em> of theories
+parametrized by a datatype declaration specifying 
+constructors and selectors for a particular datatype.
+
+No built-in operators other than equality and disequality are provided for this family 
+in the presentation language.
+Each datatype declaration, however, generates constructor, selector and tester operators
+as described in Section \ref user_doc_pres_lang_data_types. 
+
+
+\subsubsection user_doc_pres_lang_expr_rec_tup Tuples and Records
+
+Although they are currently implemented separately in CVC3,
+semantically both records and tuples can be seen as special instances of datatypes.
+In fact, a record of type \f$[\# l_0:T_0, \ldots, l_n:T_n \#]\f$
+could be equivalently modeled as, say, the datatype
+\f[
+\begin{array}{l}
+\mathrm{DATATYPE} \\
+\ \ \mathrm{Record} = \mathit{rec}(l_0:T_0, \ldots, l_n:T_n) \\
+\mathrm{END};
+\end{array}
+\f]
+
+Tuples could be seen in turn as special cases of records
+where the field names are the numbers from 0 to the length of the tuple minus 1.
+Currently, however, 
+tuples and records have their own syntax for constructor and selector operators.
+
+Records of type \f$[\# l_0:T_0, \ldots, l_n:T_n \#]\f$ have the associated
+built-in constructor
+\f$(\#\ l_0 := \_, \ldots, l_n := \_\ \#)\f$ whose arguments
+must be terms of type \f$T_0, \ldots, T_n\f$, respectively.
+
+Tuples of type \f$[\ T_0, \ldots, T_n\ ]\f$ have the associated
+built-in constructor
+\f$(\ \_, \ldots, \_\ )\f$ whose arguments
+must be terms of type \f$T_0, \ldots, T_n\f$, respectively.
+
+The selector operators on records and tuples follows a dot notation syntax.
+
+\verbatim
+% Record construction and field selection
+
+Item: TYPE = [# key: INT, weight: REAL #];
+
+x: Item = (# key := 23, weight := 43/10 #);
+k: INT = x.key;
+v: REAL = x.weight;
+
+% Tuple construction and projection
+
+y: [REAL,INT,REAL] = ( 4/5, 9, 11/9 );
+first_elem: REAL = y.0;
+third_elem: REAL = y.2;
+\endverbatim
+
+Differently from datatypes,
+records and tuples are also provided with built-in update operators
+similar in syntax and semantics to the update operator for arrays.
+More precisely,
+for each record type \f$[\#\ l_0:T_0, \ldots, l_n:T_n\ \#]\f$
+and each \f$i=0, \ldots, n\f$,
+CVC3 provides the operator 
+\f[
+ \_\ \mathrm{WITH}\ .l_i\ := \_
+\f]
+The operator maps a record \f$r\f$ of that type
+and a value \f$v\f$ of type \f$T_i\f$ to the record 
+that stores \f$v\f$ in field \f$l_i\f$ and is otherwise identical to \f$r\f$.
+Analogously,
+for each tuple type \f$[T_0, \ldots, T_n]\f$
+and each \f$i=0, \ldots, n\f$,
+CVC3 provides the operator
+\f[
+ \_\ \mathrm{WITH}\ .i\ := \_
+\f]
+
+\verbatim
+% Record updates
+
+Item: TYPE = [# key: INT, weight: REAL #];
+
+x:  Item = (# key := 23, weight := 43/10 #);
+
+x1: Item = x WITH .weight := 48;
+
+% Tuple updates
+
+Tup: TYPE = [REAL,INT,REAL];
+y:  Tup = ( 4/5, 9, 11/9 );
+y1: Tup = y WITH .1 := 3; 
+\endverbatim
+
+Updates to a nested component can be combined in a single WITH operator:
+
+\verbatim
+Cache: TYPE = ARRAY [0..100] OF [# addr: INT, data: REAL #];
+State: TYPE = [# pc: INT, cache: Cache #];
+
+s0: State;
+s1: State = s0 WITH .cache[10].data := 2/3;
+
+\endverbatim
+
+Note that, differently from updates on arrays, 
+tuple and record updates are just additional syntactic sugar.
+For instance,
+the record <tt>x1</tt> and tuple <tt>y1</tt> defined above could
+have been equivalently defined as follows:
+
+\verbatim
+% Record updates
+
+Item: TYPE = [# key: INT, weight: REAL #];
+
+x:  Item = (# key := 23, weight := 43/10 #);
+
+x1: Item = (# key := x.key,  weight := 48 #);
+
+% Tuple updates
+
+Tup: TYPE = [REAL,INT,REAL];
+y:  Tup = ( 4/5, 9, 11/9 );
+y1: Tup = ( y.0, 3, y.1 ); 
+\endverbatim
+
+
+
+
+
+
+\subsection user_doc_pres_lang_commands Commands
+
+In addition to declarations of types and constants, the CVC3 input
+language contains the following commands:
+
+- <tt>ASSERT</tt> \f$F\f$ -- Add the formula \f$F\f$ to the current logical context \f$\Gamma\f$.
+- <tt>QUERY</tt> \f$F\f$ -- Check if the formula \f$F\f$ is valid in the current
+  logical context: \f$\Gamma\models_T F\f$.
+- <tt>CHECKSAT</tt> \f$F\f$ -- Check if the formula is satisfiable in the current
+  logical context: \f$\Gamma\cup\{F\} \not\models_T \mathit{false}\f$.
+- <tt>WHERE</tt> -- Print all the assumptions in the current logical context \f$\Gamma\f$.
+- <tt>COUNTEREXAMPLE</tt> -- After an invalid QUERY or satisfiable CHECKSAT,
+  print the context that is a witness for invalidity/satisfiability.
+- <tt>COUNTERMODEL</tt> -- After an invalid QUERY or satisfiable CHECKSAT,
+  print a model that makes the formula invalid/satisfiable.  The model is in
+  terms of concrete values for each free symbol.
+- <tt>CONTINUE</tt> -- Search for a counter-example different from the current
+  one (after an invalid QUERY or satisfiable CHECKSAT).
+- <tt>RESTART</tt> \f$F\f$ -- Restart an invalid QUERY or satisfiable CHECKSAT
+  with the additional assumption \f$F\f$.
+
+- <tt>PUSH</tt> -- Save (checkpoint) the current state of the system.
+- <tt>POP</tt> -- Restore the system to the state it was in right before the
+  last call to <tt>PUSH</tt>
+- <tt>POPTO</tt> \f$n\f$-- Restore the system to the state it was in right
+  before the most recent call to <tt>PUSH</tt> made from stack level \f$n\f$.
+  Note that the current stack level is printed as part of the output of the <tt>WHERE</tt> command.
+
+- <tt>TRANSFORM</tt> \f$F\f$ -- Simplify \f$F\f$ and print the result.
+- <tt>PRINT</tt> \f$F\f$ -- Parse and print back the expression \f$F\f$.
+- <tt>OPTION</tt> <I>option</I> <I>value</I> -- Set the command-line option
+  flag <I>option</I> to <I>value</I>.  Note that <I>option</I> is given as a
+  string enclosed in double-quotes and <I>value</I> as an integer.
+
+<!--
+[CB: Don't advertise these for now--the functionality needs to be reviewed]
+
+- <tt>DUMP_PROOF</tt> -- dump the proof of the last (successful) QUERY
+- <tt>DUMP_ASSUMPTIONS</tt> -- dump the assumptions used in the proof
+  of the last (successful) QUERY
+- <tt>DUMP_TCC</tt> -- dump the TCC for the last formula in ASSERT or QUERY
+- <tt>DUMP_TCC_ASSUMPTIONS</tt> -- dump assumptions used in the proofs of the
+  TCC for the last ASSERT or QUERY
+- <tt>DUMP_TCC_PROOF</tt> -- dump the proof of the TCC for the last ASSERT 
+  or QUERY
+- <tt>DUMP_CLOSURE</tt> -- convert the last (successful) QUERY into an
+  implication (assumptions => query) and print this formula
+- <tt>DUMP_CLOSURE_PROOF</tt> -- dump the proof of the closure of the last
+  (successful) QUERY
+-->
+
+The remaining commands take a single argument, given as a string enclosed in
+double-quotes.
+
+- <tt>TRACE</tt> <I>flag</I> -- Turn on tracing for the debug flag <I>flag</I>.
+- <tt>UNTRACE</tt> <I>flag</I> -- Turn off tracing for the debug flag <I>flag</I>.
+
+- <tt>ECHO</tt> <I>string</I> -- Print <I>string</I>
+- <tt>INCLUDE</tt> <I>filename</I> -- Read commands from the file <I>filename</I>.
+
+Here, we explain some of the above commands in more detail.
+
+\subsubsection user_doc_pres_lang_commands_query QUERY
+
+The command <tt>QUERY</tt> \f$F\f$ invokes the core
+functionality of CVC3 to check the validity of the formula \f$F\f$ with respect
+to the assertions made thus far (\f$\Gamma\f$).  \f$F\f$ should be a formula as
+described in \ref user_doc_pres_lang_expr.
+
+There are three possible answers.
+- When the answer is "Valid", this means that \f$\Gamma \models_T F\f$.  After
+a valid query, the logical context \f$\Gamma\f$ is exactly as it was before the query.
+- When the answer is "Invalid", this means that \f$\Gamma \not\models_T F\f$.
+In other words, there is a model of \f$T\f$ satisfying \f$\Gamma \cup \{\neg F\}\f$.  After an
+invalid query, the logical context \f$\Gamma\f$ is augmented with new literals
+\f$\Delta\f$ such that \f$\Gamma\cup\Delta\f$ is consistent in the theory \f$T\f$, but
+\f$\Gamma\cup\Delta\models_T \neg F\f$.  In fact, in this case \f$\Gamma\cup\Delta\f$
+<em>propositionally</em> satisfies \f$\neg f\f$.  We call the new context
+\f$\Gamma\cup\Delta\f$ a <em>counterexample</em> for \f$F\f$.
+- An answer of "Unknown" is very similar to an answer of "Invalid" in that
+additional literals are added to the context which propositionally falsify the
+query formula \f$F\f$.  The difference is that because CVC3 is incomplete for
+some theories, it cannot guarantee in this case that \f$\Gamma\cup\Delta\f$ is
+actually consistent in \f$T\f$.  The only sources of incompleteness in CVC3 are
+non-linear arithmetic and quantifiers.
+
+Counterexamples can be printed out using <tt>WHERE</tt> or
+<tt>COUNTEREXAMPLE</tt> commands.  <tt>WHERE</tt> always prints out all of
+\f$\Gamma\cup C\f$.  <tt>COUNTEREXAMPLE</tt> may sometimes be more
+selective, printing a subset of those formulas from the context which
+are sufficient for a counterexample.
+
+Since the QUERY command may modify the current context, if you need to check
+several formulas in a row in the same context, it is a good idea to
+surround every QUERY command by PUSH and POP in order to preserve the
+context:
+
+\verbatim
+PUSH;
+QUERY <formula>;
+POP;
+\endverbatim
+
+\subsubsection user_doc_pres_lang_commands_checksat CHECKSAT
+
+The command <tt>CHECKSAT</tt> \f$F\f$ behaves identically to <tt>QUERY</tt>
+\f$\neg F\f$.
+
+\subsubsection user_doc_pres_lang_commands_restart RESTART
+
+The command <tt>RESTART</tt> \f$F\f$ can only be invoked after an invalid
+query.  For example:
+
+\verbatim
+QUERY <formula>;
+Invalid.
+RESTART <formula2>;
+\endverbatim
+
+The behavior of the above command will be identical to the following:
+
+\verbatim
+PUSH;
+QUERY <formula>;
+POP;
+ASSERT <formula2>;
+QUERY <formula>;
+\endverbatim
+
+The advantage of using the <tt>RESTART</tt> command is that it may be much more
+efficient than the above command sequence.  This is because when the
+<tt>RESTART</tt> command is used, CVC3 will re-use what it has learned rather
+than starting over from scratch.
+
+<!--
+[CB: Remove for now]
+\verbatim
+DUMP_PROOF
+DUMP_ASSUMPTIONS
+\endverbatim
+
+Print out a proof of the latest QUERY (if it was successfully proven),
+and the assumptions (formulas) from the current logical context used
+in the proof.
+
+Note, that <tt>DUMP_PROOF</tt> uses free proof variables for the
+proofs of assumptions without defining them, and therefore, is not
+necessarily the best way to check the proofs.  See DUMP_CLOSURE_PROOF.
+
+\verbatim
+DUMP_CLOSURE
+DUMP_CLOSURE_PROOF
+\endverbatim
+
+If the last QUERY successfully proved a formula \f$\phi\f$ using only
+a subset \f$\Gamma'\subseteq\Gamma\f$ of the current logical context,
+then <tt>DUMP_CLOSURE</tt> prints a formula
+\f[\bigwedge\Gamma'\Rightarrow\phi,\f] which is now valid by itself,
+independent of the logical context, and <tt>DUMP_CLOSURE_PROOF</tt>
+prints out a proof of that formula.
+
+This eliminates the problem of undefined proof variables from
+<tt>DUMP_PROOF</tt>.  In addition, the proofs of all the relevant TCCs
+are incorporated into the proof of the closure using a 3-valued
+implication introduction rule.  See the next section on
+\ref user_doc_pres_lang_tccs for details.
+-->
+
+\subsection user_doc_pres_lang_patterns Instantiation Patterns
+
+CVC3 processes each universally quantified formula in the current context
+by generating <em>instances</em> of 
+the formula obtained by replacing its universal variables with ground terms.
+Patterns restrict the choice of ground terms for the quantified variables,
+with the goal of controlling the potential explosion of ground instances.
+In essence, adding patterns to a formula is a way for the user to tell CVC3 
+to focus only on certain instances which, in the user's opinion, will be most
+helpful during a proof.
+
+In more detail, 
+patterns have the following effect on formulas that are found in the logical context 
+or get later added to it
+while CVC3 is trying to prove the validity of some formula \f$\varphi\f$.
+
+If a formula in the current context starts with an existential quantifier,
+CVC3 Skolemizes it, that is, replaces it in the context 
+by the formula obtained by substituting the existentially quantified variables 
+by fresh constants and dropping the quantifier.
+Any patterns for the existential quantifier are simply ignored.
+
+If a formula starts with a universal quantifier \f$\mathrm{FORALL}\; (x_1:T_1, \ldots, x_n:T_n)\f$,
+CVC3 adds to the context a number of instances 
+of the formula---with the goal of using them to prove the query \f$\varphi\f$ valid.
+An instance is obtained by replacing each \f$x_i\f$ with 
+a ground term of the same type occurring in one of the formulas in the context, 
+and dropping the universal quantifier.
+If \f$x_i\f$ occurs in a pattern \f$\mathrm{PATTERN}\; (t_1, \ldots, t_m)\f$
+for the quantifier,
+it will be instantiated only with terms obtained by simultaneously matching 
+all the terms in the pattern against ground terms in the current context \f$\Gamma\f$.
+
+Specifically, the matching process produces one or more substitutions \f$\sigma\f$ 
+for the variables in \f$(t_1, \ldots, t_m)\f$
+which satisfy the following invariant:
+for each \f$i = 1, \ldots, m\f$,
+\f$\sigma(t_i)\f$ is a ground term
+and
+there is a ground term \f$s_i\f$ in \f$\Gamma\f$ such that
+\f$\Gamma \models_T \sigma(t_i) = s_i\f$.
+The variables of \f$(x_1:T_1, \ldots, x_n:T_n)\f$ that occur in the pattern
+are instantiated only with those substitutions (while any remaining variables are instantiated arbitrarily).
+
+The Skolemized version or the added instances of a context formula may
+themselves start with a quantifier.
+The same instantiation process is applied to them too, recursively.
+
+Note that the matching mechanism is not limited to syntactic matching but is modulo 
+the equations asserted in the context. 
+Because of decidability and/or efficiency limitations, 
+the matching process is not exhaustive.
+CVC3 will typically miss some substitutions that satisfy the invariant above.
+As a consequence, it might fail to prove the validity of the query formula \f$\varphi\f$, which makes CVC3 incomplete for contexts containing quantified formulas.
+It should be noted though that exhaustive matching, which can be achieved simply by not specifying any patterns, does not yield completeness anyway since the instantiation of universal variables is still restricted to just the ground terms in the context (whereas in general additional ground terms might be needed).
+
+
+
+\subsection user_doc_pres_lang_subtypes Subtypes
+
+CVC3's language includes the definition of <em>subtypes</em> of 
+value types by means of predicate subtyping.
+
+A subtype \f$T_p\f$ of a (sub)type \f$T\f$ is defined as 
+a subset of \f$T\f$ that satisfies an associated predicate \f$p\f$.
+More precisely, 
+if \f$p\f$ is a term of type \f$T \to \mathrm{BOOLEAN}\f$,
+then for every model of \f$p\f$ (among the models of CVC3's built-in theories),
+\f$T_P\f$ is the <em>extension</em> of \f$p\f$, 
+that is,
+the set of all and only the elements of \f$T\f$ that 
+satisfy the predicate \f$p\f$.
+
+
+Subtypes like \f$T_p\f$ above can be defined by the user with a declaration of the form:
+
+\f[
+\mathit{subtype\_name}: \mathrm{TYPE} = \mathrm{SUBTYPE}(p)
+\f]
+
+where \f$p\f$ is 
+either just a (previously declared) predicate symbol of type \f$T \to \mathrm{BOOLEAN}\f$
+or a lambda abstraction of the form \f$\lambda x:T.\; \varphi\f$
+where \f$\varphi\f$ is any CVC3 formula 
+whose set of free variables contains at most \f$x\f$.
+
+Here are some examples of subtype declarations:
+
+\verbatim
+Animal: TYPE;
+
+fish : Animal;
+
+is_fish: Animal -> BOOLEAN;
+
+ASSERT is_fish(fish);
+
+% Fish is a subtype of Animal:
+
+Fish: TYPE = SUBTYPE(is_fish);
+
+shark : Fish;
+
+is_shark: Fish -> BOOLEAN;
+
+ASSERT is_shark(shark);
+
+% Shark is a subtype of Fish:
+
+Shark: TYPE = SUBTYPE(is_shark);
+
+
+% Subtypes of REAL
+
+AllReals:     TYPE = SUBTYPE(LAMBDA (x:REAL): TRUE);
+
+NonNegReal:   TYPE = SUBTYPE(LAMBDA (x:REAL): x >= 0);
+
+% Subtypes of INT
+
+DivisibleBy3: TYPE = SUBTYPE(LAMBDA (x:INT): EXISTS (y:INT): x = 3 * y);
+
+\endverbatim
+
+CVC3 provides integers as a built-in subtype \f$INT\f$ of \f$REAL\f$.
+\f$INT\f$ is a subtype and not a base type
+in order to allow mixed real/integer terms 
+without having to use coercion functions 
+such as 
+\f$\mathrm{int\_to\_real}:\mathrm{INT} \to \mathrm{REAL}\f$
+\f$\mathrm{real\_to\_int}:\mathrm{REAL} \to \mathrm{INT}\f$
+between terms of the two types.
+It is <em>built-in</em>
+because it is not definable by means of a first-order predicate.
+
+
+Note that, with the syntax introduced so far, it seems that it may be possible
+to define empty subtypes, that is, subtypes with no values at all.  For example:
+
+\verbatim
+NoReals:      TYPE = SUBTYPE(LAMBDA (x:REAL): FALSE);
+\endverbatim
+
+However, any attempt to do this results in an error.  This is because CVC3's
+logic assumes types are not empty.  In fact, 
+each time a subtype \f$S\f$ is declared
+CVC3 tries to prove that the subtype is non-empty;
+more precisely, that it is non-empty in every model of the current context.
+This is done simply by attempting to prove the validity of a formula of the form
+\f$\exists\, x:T.\; p(x)\f$ where \f$T\f$ is the value type of which \f$S\f$ is a subtype,
+and \f$p\f$ is the predicate defining \f$S\f$.
+If CVC3 succeeds, the declaration is accepted. 
+If it fails, 
+CVC3 will issue a type exception and reject the declaration.
+
+CVC3 might fail to prove the non-emptyness of a subtype 
+either because the type is indeed empty in some models 
+or because of CVC3's incompleteness over quantified formulas.
+Consider the following examples:
+
+\verbatim
+Animal: TYPE;
+
+is_fish: Animal -> BOOLEAN;
+
+% Fish is a subtype of Animal:
+
+Fish: TYPE = SUBTYPE(is_fish);
+
+Interval_0_1: TYPE = SUBTYPE(LAMBDA (x:REAL): 0 < x AND x < 1);
+
+% Subtypes of [REAL, REAL]
+
+StraightLine: TYPE = SUBTYPE(LAMBDA (x:[REAL,REAL]): 3*x.0 + 2*x.1 + 6 = 0);
+
+
+%  Constant ARRAY subtype
+
+ConstArray: TYPE = SUBTYPE(LAMBDA (a: ARRAY INT OF REAL): 
+                             EXISTS (x:REAL): FORALL (i:INT): a[i] = x);
+\endverbatim
+
+Each of these subtype declarations is rejected.  For instance,
+the declaration of <tt>Fish</tt> is rejected
+because there are models of CVC3's background theory
+in which <tt>is_fish</tt> has an empty extension.
+To fix that it is enough to introduce a free constant of type <tt>Animal</tt>
+and assert that it is a <tt>Fish</tt> as we did above.
+
+In the case of <tt>Interval_0_1</tt> and <tt>Straightline</tt>, however, 
+the type is indeed non-empty in every model, 
+but CVC3 is unable to prove it.
+In such cases,
+the user can help CVC3 by explicitly providing a witness value for the subtype.
+This is done with this alternative syntax for subtype declarations:
+
+\f[
+\mathit{subtype\_name}: \mathrm{TYPE} = \mathrm{SUBTYPE}(p,t)
+\f]
+
+where \f$p\f$ is again a unary predicate and 
+\f$t\f$ is a term (denoting an element) that satisfies \f$p\f$.
+
+The following subtype declarations with witnesses are accepted by CVC3.
+
+\verbatim
+% Subtypes of REAL with witness
+
+Interval_0_1: TYPE = SUBTYPE(LAMBDA (x:REAL): 0 < x AND x < 1, 1/2);
+
+StraightLine: TYPE = SUBTYPE(LAMBDA (x:[REAL,REAL]): 3*x.0 + 2*x.1 + 6 = 0, (0, -3));
+\endverbatim
+
+
+We observe that 
+the declaration of <tt>ConstArray</tt> in the first example is rightly rejected 
+under the empty context because the subtype can be empty in some models.
+However, even under contexts that exclude this possibility CVC3 is still unable to 
+to prove the subtype's non-emptyness. 
+Again, a declaration with witness helps in this case. 
+Example:
+
+\verbatim
+zero_array: ARRAY INT OF REAL;
+
+ASSERT FORALL (i:INT): zero_array[i] = 0;
+
+% At this point the context includes the constant array zero_array
+% and the declaration below is accepted.
+
+ConstArray: TYPE = SUBTYPE(LAMBDA (a: ARRAY INT OF REAL): 
+                             EXISTS (x:REAL): FORALL (i:INT): a[i] = x, zero_array);
+\endverbatim
+
+
+Adding witnesses to declarations to overcome CVC3's incompleteness
+is an adequate, practical solution in most cases.
+
+<!--
+[CB: This works now!]
+It should be clear though that it is only a partial solution.
+For example, 
+the, admittedly contrived, declaration of the non-empty subtype below
+by means of a non-linear arithmetic predicate is still rejected by CVC3:
+
+\verbatim
+NonNegReal2: TYPE = SUBTYPE(LAMBDA (x: REAL): EXISTS (y:REAL): x = y*y, 4);
+\endverbatim
+
+In this case the user must find alternative witnesses 
+(0 or 1 will do in the example above)
+or alternative ways to model the problem at hand 
+that do not make use of the <tt>NonNegReal2</tt> subtype.
+-->
+
+For additional convenience (when defining array types, for example)
+CVC3 has a special syntax for specifying subtypes that are finite ranges of \f$INT\f$.
+This is however just syntactic sugar.
+
+\verbatim
+% subrange type
+
+FiniteRangeArray: TYPE = ARRAY [-10..10] OF REAL;
+
+
+% equivalent but less readable formulations
+
+FiniteRange: TYPE = SUBTYPE(LAMBDA (x:INT): -10 <= x AND x <= 10);
+
+FiniteRangeArray2: TYPE = ARRAY FiniteRange OF REAL;
+
+FiniteRangeArray3: TYPE = ARRAY SUBTYPE(LAMBDA (x:INT): -10 <= x AND x <= 10) OF REAL;
+\endverbatim
+
+
+\subsubsection user_doc_pres_lang_subtyping Subtype Checking
+
+The subtype relation between a subtype and its immediate supertype is transitive.
+This implies that every subtype is a subtype of some value type,
+and so every term can be given a unique value type.
+This is important because as far as type checking is concerned, 
+subtypes are ignored by CVC3.
+By default, static type checking is enforced only at the level of maximal supertypes,
+and subtypes play a role only during validity checking.
+
+In essence,
+for every ground term of the form 
+\f$f(t_1, \ldots, t_n)\f$ with \f$i \geq 0\f$ in the logical context,
+whenever \f$f\f$ has type \f$(S_1, \ldots, S_n) \to S\f$
+where \f$S\f$ is a subtype defined by a predicate \f$p\f$,
+CVC3 adds to the context the assertion \f$p(f(t_1, \ldots, t_n))\f$
+constraining \f$f(t_1, \ldots, t_n)\f$ to be a value in \f$S\f$.
+
+<!--With quantifier-free contexts and queries,-->
+This leads to correct answers by CVC3,
+provided that all ground terms are
+<em>well-subtyped</em>
+in the logical context of the query;
+that is, if for all terms like \f$f(t_1, \ldots, t_n)\f$ above 
+the logical context entails that \f$t_i\f$ is a value of \f$S_i\f$.
+When that is not the case, CVC3 may return spurious countermodels to a query,
+that is, countermodels that do not respect the subtyping constraints.
+
+For example, after the following declarations:
+
+\verbatim
+Pos: TYPE = SUBTYPE(LAMBDA (x: REAL): x > 0, 1);
+Neg: TYPE = SUBTYPE(LAMBDA (x: REAL): x < 0, -1);
+
+a: Pos;
+b: REAL;
+
+f: Pos -> Neg = LAMBDA (x:Pos): -x;
+\endverbatim
+
+CVC3 will reply "Valid", as it should, to the command:
+
+\verbatim
+QUERY f(a) < 0;
+\endverbatim
+
+However it will reply "Invalid" to the command:
+
+\verbatim
+QUERY f(b) < 0;
+\endverbatim
+
+or to:
+
+\verbatim
+QUERY f(-4) < 0;
+\endverbatim
+
+for that matter, 
+instead of complaining in either case that the query is not well-subtyped.
+(The query is ill-subtyped in the first case 
+because there are models of the empty context in which 
+the constant <tt>b</tt> is a non-positive rational;
+in the second case 
+because in all models of the context the term <tt>-4</tt> is non-positive.)
+
+In contrast, the command sequence
+
+\verbatim
+ASSERT b > 2*a + 3; 
+QUERY f(b) < 0;
+\endverbatim
+
+say, produces the correct expected answer 
+because in this case <tt>b</tt> is indeed positive in every model of the logical context.
+
+Semantically, CVC3's behavior is justified as follows.
+Consider, just for simplicity (the general case is analogous),
+a function symbol \f$f\f$ of type \f$S_1 \to T_2\f$
+where \f$S_1\f$ is a subtype of some value type \f$T_1\f$.
+Instead of interpreting \f$S_1\f$ as <em>partial</em> function 
+that is total over \f$S_1\f$ and <em>undefined</em> outside \f$S_1\f$,
+CVC3's interprets it as a <em>total</em> function from \f$T_1\f$ to \f$T_2\f$ 
+whose behavior outside \f$S_1\f$ is specified in an arbitrary, but fixed, way.
+The specification of the behavior outside \f$S_1\f$ is internal to CVC3
+and can, from case to case, go from being completely empty,
+which means that 
+CVC3 will allow any possible way to extend \f$f\f$ from \f$S_1\f$ to \f$T_1\f$,
+to strong enough to allow only one way to extend \f$f\f$.
+The choice depends just on internal implementation considerations,
+with the understanding that 
+the user is not really interested in \f$f\f$'s behavior outside \f$S_1\f$ anyway.
+
+A simple example of this approach is given 
+by the arithmetic division operation <tt>/</tt>.
+Mathematically division is a partial function 
+from \f$\mathrm{REAL} \times \mathrm{REAL}\f$ to \f$\mathrm{REAL}\f$
+undefined over pairs in \f$\mathrm{REAL} \times \{0\}\f$.
+CVC3 views <tt>/</tt> as a total function
+from \f$\mathrm{REAL} \times \mathrm{REAL}\f$ to \f$\mathrm{REAL}\f$
+that maps pairs in \f$\mathrm{REAL} \times \{0\}\f$ to \f$0\f$
+and is defined as usual otherwise.
+In other words,
+CVC3 extends the theory of rational numbers 
+with the axiom \f$\forall\; x:\mathrm{REAL}.\; x/0 = 0\f$.
+Under this view, queries like
+
+\verbatim
+x: REAL;
+
+QUERY x/0 = 0 ;
+QUERY 3/x = 3/x ;
+\endverbatim
+
+are perfectly legitimate. Indeed the first formula is valid 
+because in each model of the empty context, 
+<tt>x/0</tt> is interpreted as zero and 
+<tt>=</tt> is interpreted as the identity relation.
+The second formula is valid, more generally, because
+for each interpretation of <tt>x</tt> the two arguments of <tt>=</tt> 
+will evaluate to the same rational number.
+CVC3 will answer accordingly in both cases.
+
+While this behavior is logically correct,
+it may be counter-intuitive to users,
+especially in applications that intend to give CVC3 only well-subtyped formulas.
+For these applications
+it is more useful to the user to get a type error from CVC3
+as soon as it receives an ill-subtyped assertion or query,
+such as for instance the two queries above.
+This feature is provided in CVC3 by using the command-line option
+<tt>+tcc</tt>.  The mechanism for checking well-subtypedness is described below.
+ 
+
+\subsubsection user_doc_pres_lang_tccs Type Correctness Conditions
+
+CVC3 uses an algorithm based on Type Correctness Conditions, TCCs for short,
+to determine if a term or formula is well-subtyped.
+This of course requires first an adequate notion of well-subtypedness.
+To introduce that notion, 
+let us start with the following definition
+where \f$T\f$ is the union of CVC3's background theories.
+
+Let us say that 
+a (well-typed) term \f$t\f$ containing no proper subterms of type \f$\mathrm{BOOLEAN}\f$ is 
+<em>well-subtyped in a model \f$M\f$</em> of \f$T\f$
+(assigning an interpretation to all the free symbols and free variables of \f$t\f$)
+if
+
+- \f$t\f$ is a constant or a variable, or
+- it is of the form \f$f(t_1, \ldots, t_n)\f$ 
+where 
+\f$f\f$ has type \f$(S_1, \ldots, S_n) \to S\f$ and 
+each \f$t_i\f$ is well-subtyped in \f$M\f$ and interpreted as a value of \f$S_i\f$.
+
+Note that this inductive definition includes the case in which the term is
+an atomic formula.
+Then we can say that 
+an atomic formula is well-subtyped in a logical context \f$\Gamma\f$
+if it is well-subtyped in every model of \f$\Gamma\f$ and \f$T\f$.
+
+While this seems like a sensible definition of well-subtypedness for atomic formulas, 
+it is not obvious how to extend it properly to non-atomic formulas.
+For example, defining a non-atomic formula to be well-subtyped in a model
+if all of its atoms are well-subtyped is too stringent.
+Perfectly reasonable formulas like
+\f[
+y > 0 \;\Rightarrow\; x/y = z 
+\f]
+with \f$x\f$, \f$y\f$, and \f$z\f$ free constants (or free variables)
+of type \f$\mathrm{REAL}\f$, say,
+would not be well-subtyped in the empty context
+because there are models of \f$T\f$ in which the atom \f$x/y = z\f$ is not well-subtyped
+(namely, those that interpret \f$y\f$ as zero).
+
+A better definition can be given 
+by treating logical connectives <em>non-strictly</em> with respect to ill-subtypedness.
+More formally, 
+but considering for simplicity only formulas 
+built with atoms, negation and disjunction connectives, and existential quantifiers
+(the missing cases are analogous),
+we define a non-atomic formula \f$\phi\f$ to be well-subtyped 
+in a model \f$M\f$ of \f$T\f$ if one of the following holds:
+
+- \f$\phi\f$ has the form \f$\lnot \phi_1\f$ and
+  \f$\phi_1\f$ is well-subtyped in \f$M\f$;
+- \f$\phi\f$ has the form \f$\phi_1 \lor \phi_2\f$ and  
+  (i) both \f$\phi_1\f$ and \f$\phi_2\f$ are well-subtyped in \f$M\f$ or
+  (ii) \f$\phi_1\f$ holds and is well-subtyped in \f$M\f$ or
+  (iii) \f$\phi_2\f$ holds and is well-subtyped in \f$M\f$;
+- \f$\phi\f$ has the form \f$\exists\:x.\; \phi_1\f$ and
+  (i) \f$\phi_1\f$ holds and is well-subtyped in some model \f$M'\f$ 
+  that differs from \f$M\f$ at most in the interpretation of \f$x\f$ or
+  (ii) \f$\phi_1\f$ is well-subtyped in every such model \f$M'\f$. 
+
+In essence, this definition is saying that for well-subtypedness in a model
+it is irrelevant if a formula \f$\phi\f$ has an ill-subtyped subformula, 
+as long as the truth value of \f$\phi\f$ is independent 
+from the truth value of that subformula. 
+
+Now we can say in general that 
+a CVC3 formula is <em>well-subtyped in a context \f$\Gamma\f$</em>
+if it is well-subtyped in every model of \f$\Gamma\f$ and \f$T\f$.
+
+According to this definition, the previous formula \f$y > 0 \;\Rightarrow\; x/y = z\f$,
+which is equivalent to \f$\lnot(y > 0) \;\lor\; x/y = z\f$,
+is well-subtyped in the empty context.
+In fact, in all the models of \f$T\f$ that interpret \f$y\f$ as zero,
+the subformula \f$\lnot(y > 0)\f$ is true and well-subtyped;
+in all the others, both \f$\lnot(y > 0)\f$ and \f$x/y = z\f$ are well-subtyped.
+
+
+This notion of well-subtypedness has a number of properties 
+that make it fairly robust.
+One is that it is invariant with respect to equivalence in a context:
+for every context \f$\Gamma\f$ and formulas \f$\phi, \phi'\f$
+such that \f$\Gamma \models_T \phi \Leftrightarrow \phi'\f$,
+the first formula is well-subtyped in \f$\Gamma\f$ if and only if the second is.
+
+Perhaps the most important property, however, is that 
+the definition can be effectively reflected into CVC3's logic itself:
+there is a procedure that
+for any CVC3 formula \f$\phi\f$ can compute 
+a well-subtyped formula \f$\Delta_\phi\f$,
+a <em>type correctness condition</em> for \f$\phi\f$,
+such that 
+\f$\phi\f$ is well-subtyped in a context \f$\Gamma\f$
+if and only if 
+\f$\Gamma \models_T \Delta_\phi\f$.
+This has the nice consequence that 
+the very inference engine of CVC3 can be used to check
+the well-subtypedness of CVC3 formulas.
+
+When called with the TCC option on (by using the command-line option <tt>+tcc</tt>), CVC3 behaves as follows.
+Whenever it receives an ASSERT or QUERY command, 
+the system computes the TCC of the asserted formula or query
+and checks its validity in the current context (for ASSERTs,
+before the formula is added to the logical context).  
+If it is able to prove the TCC valid,
+it just adds the asserted formula to the context
+or checks the validity of the query formula.
+If it is unable to prove the TCC valid,
+it raises an ill-subtypedness exception and aborts.
+
+<!--
+The command <tt>DUMP_TCC</tt> prints out the TCC for the formula
+in the most recent ASSERT or QUERY, 
+and <tt>DUMP_TCC_PROOF</tt> produces the corresponding proof
+(assuming TCC has been proven successfully).
+-->
+
+It is worth pointing out that, 
+since CVC3 checks the validity of an asserted formula
+in the current logical context at the time of the assertion, 
+the order in which formulas are asserted makes a difference.
+For instance, 
+attempting to enter the following sequence of commands:
+
+\verbatim
+f: [0..100] -> INT;
+x: [5..10];
+y: REAL;
+
+ASSERT f(y + 3/2) < 15;
+ASSERT y + 1/2 = x;
+\endverbatim
+
+results in a TCC failure for the first assertion
+because the context right before it does not
+entail that the term <tt>y + 3/2</tt> is in the range <tt>0..100</tt>.
+In contrast, the sequence
+
+\verbatim
+f: [0..100] -> INT;
+x: [5..10];
+y: REAL;
+
+ASSERT y + 1/2 = x;
+ASSERT f(y + 3/2) < 15;
+\endverbatim
+
+is accepted
+because each of the formulas above is well-subtyped at the time of its assertion.
+Note that
+the assertion of both formulas together in the empty context with
+
+\verbatim
+ASSERT f(y + 3/2) < 15 AND y + 1/2 = x
+\endverbatim
+
+or with
+
+\verbatim
+ASSERT y + 1/2 = x AND f(y + 3/2) < 15
+\endverbatim
+
+is also accepted because the conjunction of the two formulas
+is well-subtyped in the empty context.
+
+
+\section user_doc_smtlib_lang SMT-LIB Input Language
+
+CVC3 is able to read and execute queries in the SMT-LIB format.
+
+Specifically, when called with the option <tt>-lang smt</tt>
+it accepts as input an SMT-LIB <em>benchmark</em>
+belonging to one of the SMT-LIB <em>sublogics</em>.
+For a well-formed input benchmark,
+CVC3 returns the string "sat", "unsat" or "unknown",
+depending on whether it can prove the benchmark satisfiable, unsatisfiable, or neither.
+
+At the time of this writing CVC3 supported all SMT-LIB sublogics.
+
+We refer the reader to the 
+<a href="http://www.smt-lib.org">SMT-LIB website</a>
+for information on SMT-LIB, its formats, its logics, and its on-line library of benchmarks.
+
+
+*/
+
+

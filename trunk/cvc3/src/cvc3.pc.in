@@ -1,0 +1,12 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+datarootdir=@prefix@/share
+datadir=@datadir@
+
+Name: CVC3
+Description: Automatic theorem prover for Satisfiability Modulo Theories (SMT) problems
+Version: @VERSION@
+Libs: -L${libdir} -lcvc3
+Cflags: -I${includedir}

@@ -1,0 +1,598 @@
+/*!
+
+\page INSTALL INSTALL
+
+<strong>Contents:</strong>
+
+<ul>
+<li>\ref quickstart</li>
+<li>\ref requirements</li>
+<li>\ref advanced</li>
+<li>\ref installing</li>
+<li>\ref documentation</li>
+<li>\ref faq</li>
+<li>\ref help</li>
+</ul>
+
+\section quickstart Quick Start
+
+You can download a source distribution of %CVC3 from the
+<a href="http://www.cs.nyu.edu/acsys/cvc3/download.html">CVC3 downloads
+page</a>. Save the source archive as <code>cvc3.tar.gz</code> in the
+directory of your choice and extract the contents using your favorite
+archive program (you can use <code>tar xzvf cvc3.tar.gz</code> from a
+terminal). This will create a directory containing the source of
+%CVC3, normally called <code>cvc3-XXX</code>. In the following we will
+denote the this directory as <code>$CVC3_SRC</code>. To build %CVC3,
+open your favorite terminal program and run the following sequence of
+commands
+
+<pre>
+   cd $CVC3_SRC
+   ./configure
+   make
+</pre>
+
+If any part of the build process fails, please read the following section for more information.
+
+A successful build will create a library <code>libcvc3</code> in the
+<code>$CVC3_SRC/lib</code> directory, and an executable
+<code>cvc3</code> in the <code>$CVC3_SRC/bin</code> directory (these
+are symbolic links to the actual files which are stored in
+architecture- and configuration-dependent subdirectories). The
+directory <code>$CVC3_SRC/test</code> contains an example program
+using the %CVC3 library <code>libcvc3</code>. To try it out, run the
+following commands in the terminal:
+
+<pre>
+   cd test
+   make
+   bin/test
+</pre>
+
+By default, <code>make</code> will build optimized code, static
+libraries, and a static executable. To build the "debug" version (much
+slower but with more error checking) use the following configuration
+command instead:
+
+<pre>
+   ./configure --with-build=debug
+</pre>
+
+In case you prefer to build shared libraries (and thus a much smaller
+executable), use the following configuration command:
+
+<pre>
+  ./configure --enable-dynamic
+</pre>
+
+If you do choose to buld the shared libraries, you must set your
+<code>LD_LIBRARY_PATH</code> environment variable to
+<code>$CVC3_SRC/lib</code> before running %CVC3 or using the shared
+libraries.
+
+Alternatively, these and other options can be changed by editing the
+<code>Makefile.local</code> file after running
+<code>configure</code>.  However, be aware that re-running
+<code>configure</code> will overwrite any changes you have made to
+<code>Makefile.local</code>.
+
+\section requirements Requirements
+
+%CVC3 has the following build dependencies:
+
+<ul>
+<li><a href="http://www.gnu.org/software/gcc/">GCC</a> version 3.0 or later</li>
+<li><a href="http://www.gnu.org/software/bash/">Bash</a></li>
+<li><a href="http://flex.sourceforge.net/">Flex</a></li>
+<li><a href="http://www.gnu.org/software/bison/">Bison</a></li>
+<li><a href="http://gmplib.org/">GMP</a> <em>(recommended)</em></li>
+<li>A <a href="http://python.org/">Python</a> interpreter 
+<em>(optional, for Java support)</em></li>
+<li>A <a href="http://java.sun.com/">Java</a> compiler 
+<em>(optional, for Java support)</em></li>
+</ul>
+
+All of these tools are available from common package repositories
+(e.g., Debian, Ubuntu, Red Hat, Cygwin).
+
+\section advanced Advanced Configuration
+
+The configure script checks for the components needed to build %CVC3.
+If for some reason, the configure script is missing or doesn't run on
+your platform, you can recreate it from <code>configure.ac</code> by
+running <code>autoconf</code>.
+
+As the configure script runs, if something is not found, it
+complains. configure looks for components in standard locations and
+also uses several environment variables that you can set to help it
+find things. In particular, you can set <code>CPPFLAGS</code> to
+&quot;<code>-I $includeDir</code>&quot; if you have headers in a nonstandard
+directory <code>$includeDir</code>, and <code>LDFLAGS</code> to
+&quot;<code>-L $libDir</code>&quot; if you have libraries in a nonstandard
+directory <code>$libDir</code>. Alternatively you can pass these
+directories to the <code>configure</code> script using the following
+command
+
+<pre>
+    ./configure --with-extra-includes=$includeDir --with-extra-libs=$libDir
+</pre>
+
+Run <code>./configure --help</code> for a list of all such environment
+variables and options.
+
+<h3>
+GMP
+</h3>
+
+One of the components %CVC3 depends on is the GNU Multiple Precision (GMP)
+library.  Many Unix-like distributions include gmp packages.
+
+If you do not have GMP installed or your installation does not work, we
+recommend that you install it manually:
+
+1. Download the GMP source code from http://gmplib.org/
+
+2. Unpack the sources, and from the root-directory of the GMP source code, run
+
+<pre>
+   ./configure 
+   make
+</pre>
+
+   On some Solaris machines, you may need to configure GMP with
+  
+<pre>
+   ./configure ABI=32
+</pre>
+
+   to make the resulting GMP library compatible with the %CVC3
+   libraries.  The reason for this is that the default ABI that gcc
+   chooses in %CVC3 compilation is not necessarily the default ABI
+   that the GMP configure script selects, and one of them may need to be
+   adjusted.
+
+3. Now, either install GMP system-wide (make install), or supply the
+   appropriate values for CPPFLAGS and LDFLAGS to the %CVC3 configure script.
+
+If for some reason, you do not want to use GMP, you can configure %CVC3 to use
+native arithmetic by running:
+
+<pre>
+   ./configure --with-arith=native
+</pre>
+
+If you compile %CVC3 with native arithmetic, it is possible that %CVC3 may fail
+as the result of arithmetic overflow.  If an overflow occurs, you will get
+an error message and %CVC3 will abort.
+
+<h3>
+Java interface
+</h3>
+
+<em><strong>Note: The Java interface is experimental. The API may
+change in future releases.</strong></em>
+
+To build the Java interface to %CVC3, use the
+<code>--enable-java</code> configuration option.  The configuration
+script refers to the environment variables <code>JAVAC</code>,
+<code>JAVAH</code>, <code>JAR</code>, and <code>CXX</code> to set up
+the standard Java and C++ compiler commands. It refers to the
+environment variable <code>JFLAGS</code> for default Java compiler
+flags. It refers to the variable <code>javadir</code> for the
+installation directory of the CVC3 Java library.
+
+The configuration options <code>--with-java-home</code> and
+<code>--with-java-includes</code> can be used to specify the path to
+the directories containing the JDK installation and JNI header files,
+respectively.
+
+You must build %CVC3 as a dynamic library to use the Java
+interface. For example, you might configure the build by running the
+following in the top-level %CVC3 directory:
+
+<pre>
+    ./configure --enable-dynamic --enable-java
+</pre>
+
+<b>Note:</b> The Java interface depends on the "build type" (e.g.,
+"optimized", "debug") of %CVC3. If you choose to re-configure and
+re-build %CVC3 with a different build type, you must run "make clean"
+in the current directory and re-build the interface (cleaning and 
+rebuilding the entire %CVC3 package will suffice).
+
+<h4>
+Using the Java interface
+</h4>
+
+To access the library, you must add the file
+<code>libcvc3-X.Y.Z.jar</code> (where "X.Y.Z" is the CVC3 version) to
+the classpath (e.g., by setting the <code>CLASSPATH</code> environment
+variable) and both <code>libcvc3.so</code> and
+<code>libcvc3jni.so</code> to the runtime library path (e.g., by
+setting the <code>LD_LIBRARY_PATH</code> environment variable
+java.library.path JVM variable).
+
+For example, to compile the class Client.java:
+
+<pre>
+    javac -cp lib/libcvc3-X.Y.Z.jar Client.java
+</pre>
+
+To run:
+
+<pre>
+  export LD_LIBRARY_PATH=/path/to/cvc3/libs
+  java -Djava.library.path=/path/to/cvc3/libs -cp lib/libcvc3-X.Y.Z.jar Client
+</pre>
+
+<h3>
+.NET interface
+</h3>
+
+<em><strong>Note: The .NET interface is experimental. The API may
+change in future releases.</strong></em>
+
+A .NET interface to the %CVC3 library can be built using Visual Studio
+2005 or later. To build the interface:
+
+<ol>
+<li>The lexers and parsers for the supported input languages need to be generated outside of Visual Studio. This can be done in two ways:
+  <ul>
+  <li>Use the lexer/parser files created by a Cygwin build. It suffices to run Make in <code>src/parser</code>: 
+<pre>
+./configure
+cd src/parser
+make
+</pre>
+</li>
+
+  <li>Run the script <code>make_parser.bat</code> in directory <code>src/parser</code> with the native Windows versions of <a href="http://gnuwin32.sourceforge.net/packages/flex.htm">Flex</a> and <a href="http://gnuwin32.sourceforge.net/packages/bison.htm">Bison</a>.</li>
+  </ul>
+</li>
+<li>Open the solution file <code>windows/cvc3.sln</code> in Visual Studio. The solution file contains the following projects (each with Debug/Release versions):
+  <ul>
+<li>cvc3lib: the C++ %CVC3 library</li>
+<li>cvc3: the %CVC3 command-line program</li>
+<li>cvc3test: tests for cvc3lib</li>
+<li>cvc3libcli: the .NET %CVC3 library</li>
+<li>cvc3cli: a C# clone of the %CVC3 command-line program</li>
+<li>cvc3testcli: tests for cvc3libcli</li>
+  </ul>
+</li>
+</ol>
+
+Each project can be built as usual with Visual Studio. Binaries will
+be put in the folders <code>windows/release</code> (for Release
+builds) and <code>windows/debug</code> (for Debug builds).
+
+For more information, see the file <code>windows/INSTALL</code>.
+
+<b>Note:</b> the .NET interface can only be used on Microsoft's CLR,
+because Visual Studio produces <a
+href="http://mono-project.com/CPlusPlus">mixed-mode assemblies</a>.
+
+<h3>
+Mac OS X
+</h3>
+
+Mac OS X uses <code>DYLD_LIBRARY_PATH</code> in place of
+<code>LD_LIBRARY_PATH</code>.
+
+On Intel Macs, by default, %CVC3 compiles in 32-bit or 64-bit mode
+based on the compiler's default.  If you want to build as one or
+the other in particular (for example, to match your libgmp
+installation), put CXXFLAGS=-m32 (and JREFLAGS=-d32, if you are
+compiling the Java bindings) in the environment when you run 
+configure.
+
+To run regression testing (make regress), you'll need GNU time.
+We suggest you install MacPorts (from macports.org) and then the
+"gtime" package.
+
+You'll need also a libgmp installation.  libgmp can be downloaded from
+gmplib.org.  If you install it in a nonstandard location (with
+./configure --prefix=...) you'll need to give this location to CVC3
+when you configure it:
+
+  ./configure --with-extra-includes=...--with-extra-libs=...
+
+or it may not find your installation of libgmp.
+
+<h3>
+ Cygwin 
+</h3>
+
+In order to use GMP on Cygwin, make sure the following packages are
+installed: gmp, libgmp-devel, libgmp3, bison, flex, and make, as well
+as standard UNIX tools.
+
+On Windows, it's common to have directory names with embedded spaces.
+This can be problematic for the CVC3 build system.  Therefore on
+Cygwin we recommend symbolically linking to names without embedded
+spaces, something like the following:
+
+<pre>
+  $ pwd
+  /home/ACSys Group
+  $ ln -s 'ACSys Group' /home/acsys
+  $ export HOME=/home/acsys
+  $ cd
+  $ pwd
+  /home/acsys
+  $ cd cvc3
+  $ ./configure --prefix=/home/acsys/cvc3.installation ...etc...
+</pre>
+
+On Windows, Sun's JDK doesn't install the Java compiler "javac" into the
+standard path for executables.  If you want to build Java bindings,
+you'll need to point CVC3 to it.  Again using symbolic linking as above:
+
+<pre>
+  $ pwd
+  /home/acsys/cvc3
+  $ ln -s '/cygdrive/c/Program Files' /programs
+  $ ./configure --enable-java --with-java-home=/programs/Java/jdk1.6.0_16 ...
+</pre>
+
+Such symbolic linking (and in general using cygwin full paths) may cause
+problems with non-cygwin programs.  In particular, if you have Windows
+emacs installed (instead of cygwin's emacs), you have a version of etags
+that may give errors at the end of the install.  These errors (about source
+files not existing when in fact they do) shouldn't break the build (make
+won't complain and bomb out; it's just that these are at the very end of
+the build, so it looks like they are causing problems) and can be safely
+ignored.
+
+<h3>
+ <a name="64-bit Platforms">64-bit Platforms</a>
+</h3>
+
+When building %CVC3 on 64-bit platforms, you must compile %CVC3 in the
+same mode as any libraries it uses. For example, if GMP is compiled in
+64-bit mode, then %CVC3 must compiled in 64-bit mode as well. The
+configuration script will try to infer the correct compilation
+settings. You can run <code>./config.guess</code> to see the default
+platform type:
+
+    $ ./config.guess
+    i686-pc-linux-gnu
+
+You can use the <code>--build</code> argument to
+<code>configure</code> to override the default. For example, to
+compile in 64-bit mode on a x86-64 CPU, you can use <code>./configure
+--build=x86_64-pc-linux-gnu</code>.
+
+<h3>
+  LLVM
+</h3>
+
+<em><strong>Note: Compiling %CVC3 with LLVM is not supported and 
+may cause runtime errors.</strong></em>
+
+To compile with LLVM, run configure with the options:
+
+<pre>
+./configure CXX=llvm-gcc LIBS='-lstdc++'
+</pre>
+
+<h3>
+Other Configuration Options
+</h3>
+
+Other configuration options include where to install the results of
+"make install" (see below), what type of build to use (optimized,
+debug, gprof, or gcov), and whether to use static or dynamic
+libraries.  For help on these options, type
+
+<pre> 
+./configure --help 
+</pre>
+
+configure creates the file Makefile.local which stores all of the
+configuration information.  If you want to customize your build
+without re-running configure, or if you want to customize it in a way
+that configure does not allow, you can do it by editing
+Makefile.local.  For example, you can build a debug, gprof version by
+editing Makefile.local and setting OPTIMIZED to 0 and GPROF to 1 (by
+default, gprof runs with an optimized executable).  Note that for most
+configuration options, the objects, libraries, and executables are
+stored in a configuration-dependent directory, with only symbolic
+links being stored in the main bin and lib directories.  This allows
+you to easily maintain multiple configurations and multiple platforms
+using the same source tree.
+
+<h4>
+ Additional make options
+</h4>
+
+To rebuild dependencies, type:
+
+<pre> 
+    make depend 
+</pre>
+
+To remove just the executable or libraries in the current
+configuration, type:
+
+<pre> 
+    make spotty 
+</pre>
+
+To remove in addition all object files and makefile dependencies for
+the current configuration, type:
+
+<pre> 
+    make clean 
+</pre>
+
+To remove all files that are not part of the distribution (including
+all object, library, and executables built for any configuration or
+platform), type:
+
+<pre> 
+    make distclean 
+</pre>
+
+To build a tarball distribution of the current source tree, type:
+
+<pre> 
+    make dist 
+</pre>
+
+\section installing Installing CVC3
+
+To install %CVC3 system-wide, (assuming you have already run configure)
+run:
+
+<pre>
+    make install
+</pre>
+
+Installation depends on two configuration options: <code>prefix</code>
+and <code>exec_prefix</code>.  By default, both are set to
+<code>/usr/local</code>, but these can be overridden by specifying the
+correct arguments to configure or by editing
+<code>Makefile.local</code>.
+
+Installation copies all necessary header files to
+<code>$prefix/include/cvc3</code>. It installs the library
+<code>libcvc3</code> in <code>$exec_prefix/lib</code> and the
+executable <code>cvc3</code> in <code>$exec_prefix/bin</code>. By
+default, a static library and executable are installed.  If you want
+to install shared library versions, configure for shared libraries as
+described above.
+
+
+\section documentation Documentation
+
+To build HTML documentation, run
+
+<pre>
+
+   make doc
+
+</pre>
+
+Then open <code>doc/html/index.html</code> in your favorite browser.
+
+\section faq Frequently Asked Questions
+
+<h3>
+Configuration Errors
+</h3>
+
+<h4>
+<code>libgmp.a is not found</code>
+</h4>
+
+Make sure the GMP library is in your <code>LD_LIBRARY_PATH</code> and
+<code>gmp.h</code> is in your <code>CPATH</code> (or use the
+<code>--with-extra-lib</code> and <code>--with-extra-include</code>
+arguments to <code>./configure</code>).
+
+If your paths are properly configured and you are compiling for a
+64-bit architecture, you may have a 32/64-bit mismatch. Check the
+binary type of the GMP library using the <code>file</code>
+utility. For example, running <code>file</code> on a 32-bit Linux GMP
+shared library will return:
+
+<pre>
+    $ file /usr/lib/libgmp.so.3.4.2
+    /usr/lib/libgmp.so.3.4.2: ELF 32-bit LSB shared object, Intel 80386, version 1 (SYSV), dynamically linked, stripped
+</pre>
+
+You can use the <code>--build</code> arguments to
+<code>./configure</code> to set the target binary type for %CVC3. For
+example, <code>./configure --build=i686-linux-gnu</code> or
+<code>./configure --build=x86_64-linux-gnu</code>.
+
+<h4>
+<code>Unable to locate Java directories</code>
+</h4>
+
+Set the <code>JAVA_HOME</code> environment variable or use the
+<code>--with-java-home</code> argument to
+<code>./configure</code>. Some typical <code>JAVA_HOME</code> settings
+are as follows (where <em>X.Y.Z</em> is the version number of the installed
+Java runtime).
+
+<table>
+<tr>
+<th> Platform    </th><th> <code>JAVA_HOME</code> </th><th> Notes
+</th></tr>
+<tr>
+<td> Debian/Ubuntu Linux </td>
+<td> <code>/usr/lib/jvm/default-java</code> </td>
+<td> Install the <code>default-jre</code> or 
+<code>default-jre-headless</code> package </td></tr>
+<tr>
+<td>    Fedora Linux     </td>
+<td> <code>/usr/java/jre<em>X.Y.Z</em></code> </td>
+<td> </td></tr>
+<tr>
+<td>    Mac OS X         </td>
+<td> <code>/System/Library/Frameworks/JavaVM.framework/Home</code> </td>
+<td> </td></tr>
+<tr>
+<td>    Windows          </td>
+<td> <code>C:\\Program Files\\Java\\jdk<em>X.Y.Z</em></code> </td>
+<td> </td></tr>
+</table>
+
+<h3>
+Runtime Errors (CVC3 library)
+</h3>
+
+<h4>Segmentation fault when running a dynamically-linked executable.</h4>
+
+This can be caused by a mismatched "build type".  The debug and
+optimized version of the %CVC3 shared library are not binary
+compatible.  If you are linking against a debug version of the shared
+library, you must define the symbol _CVC3_DEBUG_MODE during
+compilation. E.g., add <code>-D_CVC3_DEBUG_MODE</code> to
+<code>CXXARGS</code>.
+
+<h4>Fatal error: <code>Mis-handled the ref. counting</code></h4>
+
+This can be cause by a number of problems. Make sure that all <code>Expr</code>
+objects are out of scope or have been manually deleted before deleting
+the <code>ValidityChecker</code>.
+
+<h4>
+<code>Exception in thread "main" java.lang.UnsatisfiedLinkError: no cvc3jni in java.library.path</code>
+</h4>
+
+The Java runtime was not able to find the %CVC3 JNI library. Use
+<code>java -Djava.library.path=PATH_TO_CVC3JNI</code>, where
+<code>PATH_TO_CVC3JNI</code> is the directory containing the file
+<code>libcvc3jni.so</code>.
+
+<h4>
+<code>Exception in thread "main" java.lang.UnsatisfiedLinkError: libcvc3jni.so.<em>x.y.z</em></code>
+</h4>
+
+The Java runtime was not able to satisfy the link dependencies of the
+%CVC3 JNI library. Make sure that the %CVC3 and GMP libraries are in
+your <code>LD_LIBRARY_PATH</code>.
+
+If your paths are properly configured and you are compiling for a
+64-bit architecture, you may have a 32/64-bit mismatch. Make sure the
+JVM is running in the same mode as the %CVC3 library using the
+<code>-d32</code> or <code>-d64</code> argument to <code>java</code>.
+
+<h4>
+On Mac: 
+<code>terminate called after throwing an instance of 'CVC3::TypecheckException'</code>
+</h4>
+
+This appears to be a bug in certain versions of GCC distributed by
+Apple. Upgrade to XCode 3.1.2 or later (GCC version "4.0.1 (Apple
+Inc. build 5490)") or configure with <code>CXXFLAGS=-01</code>.
+
+\section help Getting help
+
+If you find a problem with the instructions in this installation guide, please
+send email to <a href="mailto:cvc-bugs@cs.nyu.edu">cvc-bugs@cs.nyu.edu</a>.
+
+*/

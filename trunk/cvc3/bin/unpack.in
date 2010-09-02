@@ -1,0 +1,96 @@
+#!@PERL@ -w
+
+# Merges several static libraries (*.a) into a single library.  Tries
+# to maintain the order of the members as it was in the original
+# libraries.  Multiple members of the same name may be present in
+# different input libraries and correctly packaged.  However, if
+# multiple members with the same name reside in the same input
+# library, only the last one will be used.
+
+use strict;
+
+my $usageString = "unpack.pl <tmpdir> lib1.a lib2.a ...
+Unpacks all .o files from lib1.a, lib2.a, etc into <tmpdir> and prints the list
+of .o files on the standard output";
+
+if($#ARGV < 1) {
+    print STDERR "temp dir and at least 1 input name must be given.\n";
+    print STDERR "$usageString\n";
+    exit 1;
+}
+
+my $tmpDir = $ARGV[0];
+my @inFiles = @ARGV[1..$#ARGV];
+
+my $currDir = `pwd`; $currDir =~ s/\n//g;
+
+# Create the database of members: mappings of each file to the
+# respective library name, and to the list of members in the original
+# order
+
+my %libName=();
+my %members=();
+my $countLibs=0;
+my $countMembers=0;
+
+# List of input files without repetition
+my @tmp = ();
+
+for(my $i=0; $i<=$#inFiles; $i++) {
+    # Skip the library if we've seen it already
+    if(!defined($libName{$inFiles[$i]})) {
+	push @tmp, $inFiles[$i];
+	$countLibs++;
+	if($inFiles[$i] =~ m/lib(\w+).a$/) {
+	    $libName{$inFiles[$i]} = $1;
+	    my $lines=`ar t '$inFiles[$i]'`;
+	    my @lines = split(/\n/, $lines);
+	    $countMembers += ($#lines + 1);
+	    $members{$inFiles[$i]} = [@lines];
+	} else {
+	    print STDERR "Weird library name: $inFiles[$i]; skipping it";
+	}
+    } else {
+	print STDERR "Repeated input (ignored): $inFiles[$i]\n";
+    }
+}
+
+print STDERR "Found $countMembers members in $countLibs libraries\n";
+
+# Update the list of input files (remove repetitions)
+@inFiles = @tmp;
+
+# Given a possibly relative path, compute the full path
+sub fullPath {
+    my ($name) = @_;
+    if($name =~ m@^/@) {
+	# It's already the full path
+	return $name;
+    } else {
+	return "$currDir/$name";
+    }
+}
+
+# Unpack files and create the list of members with relative paths into tmpDir
+my @allMembers=();
+
+mkdir($tmpDir, 0755) or die "Cannot create $tmpDir/: $?";
+for(my $i=0; $i<=$#inFiles; $i++) {
+    my $libName = $libName{$inFiles[$i]};
+    my $file = fullPath($inFiles[$i]);
+    print STDERR "Unpacking $libName\n";
+    mkdir("$tmpDir/$libName", 0755)
+	or die "Cannot create $tmpDir/$libName: $?";
+    system("cd '$tmpDir/$libName'; ar x '$file'")
+	&& die "Cannot extract from archive $file: $?";
+    my @names=@{$members{$inFiles[$i]}};
+    for(my $j=0; $j<=$#names; $j++) {
+        if ($names[$j] =~ /^.*\.o/i) {
+	    push @allMembers, "'$tmpDir/$libName/$names[$j]'";
+        }
+    }
+}
+
+# Create the list of all members
+my $allMembers = join(" ", @allMembers);
+print "$allMembers";
